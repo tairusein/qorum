@@ -30,6 +30,9 @@
     let activeChatChannel = null;
     let activeTrackingSessionId = null;
     let trackingHeartbeat = null;
+    let authView = "credentials";
+    let pendingRecovery = null;
+    let recoverySaveInProgress = false;
     const personalGameSeconds = Object.fromEntries(games.map(game => [game.id, 0]));
 
     const featuredGames = document.getElementById("featured-games");
@@ -91,39 +94,319 @@
     function openAuth(mode) {
       if (!authModal) return;
       authMode = mode;
-      let usernameField = document.getElementById("username-field");
-      if (!usernameField) {
-        usernameField = document.createElement("label");
-        usernameField.className = "form-field";
-        usernameField.id = "username-field";
-        usernameField.textContent = "Username";
-        const usernameInput = document.createElement("input");
-        usernameInput.id = "auth-username";
-        usernameInput.type = "text";
-        usernameInput.minLength = 3;
-        usernameInput.maxLength = 24;
-        usernameInput.pattern = "[A-Za-z0-9_]{3,24}";
-        usernameInput.autocomplete = "username";
-        usernameInput.placeholder = "3-24 letters, numbers, or _";
-        usernameField.append(usernameInput);
-        document.getElementById("auth-email").parentElement.before(usernameField);
-      }
+      ensureRecoveryUI();
+      authView = "credentials";
       const usernameInput = document.getElementById("auth-username");
-      usernameField.hidden = mode !== "signup";
-      usernameInput.required = mode === "signup";
       document.getElementById("modal-title").textContent = mode === "signin" ? "Welcome back" : "Join QORUM";
-      document.getElementById("modal-description").textContent = mode === "signin" ? "Sign in to pick up where you left off." : "Create your player profile and find your people.";
+      document.getElementById("modal-description").textContent = mode === "signin" ? "Sign in with your username and password." : "Create an account without an email address.";
       document.getElementById("auth-submit").textContent = mode === "signin" ? "Sign in" : "Create account";
       document.getElementById("modal-switch").textContent = mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in";
+      document.getElementById("auth-username-label").firstChild.textContent = mode === "signin" ? "Username" : "Choose a username";
+      document.getElementById("auth-username").autocomplete = mode === "signin" ? "username" : "username";
       const passwordInput = document.getElementById("auth-password");
       passwordInput.minLength = 8;
-      passwordInput.placeholder = "At least 8 characters";
+      passwordInput.maxLength = 72;
+      passwordInput.placeholder = mode === "signin" ? "Your password" : "At least 8 characters";
       passwordInput.autocomplete = mode === "signin" ? "current-password" : "new-password";
       const demoNote = authModal.querySelector(".demo-note");
-      if (demoNote) demoNote.textContent = "Sign up with a valid email address. Email confirmation may be required.";
+      if (demoNote) demoNote.textContent = mode === "signin"
+        ? "No email address is used. Forgot your password? Use your recovery code."
+        : "Save the one-time recovery code after creating your account. It cannot be shown again.";
       document.getElementById("form-error").textContent = "";
+      setAuthView("credentials");
       authModal.classList.add("open");
-      document.getElementById("auth-email").focus();
+      usernameInput.focus();
+    }
+
+    function ensureRecoveryUI() {
+      const form = document.getElementById("auth-form");
+      if (!form || document.getElementById("forgot-password-button")) return;
+
+      const forgotButton = document.createElement("button");
+      forgotButton.type = "button";
+      forgotButton.id = "forgot-password-button";
+      forgotButton.className = "modal-switch";
+      forgotButton.textContent = "Forgot password? Use a recovery code";
+      forgotButton.addEventListener("click", () => {
+        authView = "recovery";
+        setAuthView("recovery");
+        document.getElementById("recovery-username").focus();
+      });
+      form.append(forgotButton);
+
+      const recoveryForm = document.createElement("section");
+      recoveryForm.id = "recovery-form-view";
+      recoveryForm.className = "account-recovery-view";
+      recoveryForm.hidden = true;
+      recoveryForm.innerHTML = `
+        <h3>Recover your account</h3>
+        <p>Enter your username, saved recovery code, and a new password.</p>
+        <label class="form-field">Username<input id="recovery-username" type="text" minlength="3" maxlength="24" autocomplete="username"></label>
+        <label class="form-field">Recovery code<input id="recovery-code" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label class="form-field">New password<input id="recovery-new-password" type="password" minlength="8" maxlength="72" autocomplete="new-password"></label>
+        <p class="form-error" id="recovery-error" aria-live="polite"></p>
+        <button class="primary-button modal-submit" type="button" id="recovery-submit">Reset password</button>
+        <button class="modal-switch" type="button" id="recovery-back">Back to sign in</button>`;
+      form.append(recoveryForm);
+
+      const savingView = document.createElement("section");
+      savingView.id = "recovery-saving-view";
+      savingView.className = "account-recovery-view";
+      savingView.hidden = true;
+      savingView.innerHTML = `
+        <h3>Saving recovery code</h3>
+        <p id="recovery-saving-message">Your account is created. Keep this window open while the recovery code is saved.</p>
+        <button class="primary-button modal-submit" type="button" id="recovery-save-retry">Try saving again</button>`;
+      form.append(savingView);
+
+      const codeView = document.createElement("section");
+      codeView.id = "recovery-code-view";
+      codeView.className = "account-recovery-view";
+      codeView.hidden = true;
+      codeView.innerHTML = `
+        <h3>Save your recovery code</h3>
+        <p>This code is shown only once. Keep it private and store it somewhere safe. It is not your password.</p>
+        <p class="recovery-username-line">Username: <strong id="recovery-card-username"></strong></p>
+        <code class="recovery-code-value" id="recovery-card-code"></code>
+        <div class="profile-actions">
+          <button class="secondary-button" type="button" id="recovery-copy">Copy code</button>
+          <button class="secondary-button" type="button" id="recovery-download">Download recovery card</button>
+        </div>
+        <p class="profile-note" id="recovery-card-status" aria-live="polite"></p>
+        <button class="primary-button modal-submit" type="button" id="recovery-continue">I've saved it — continue</button>`;
+      form.append(codeView);
+
+      document.getElementById("recovery-back").addEventListener("click", () => {
+        authMode = "signin";
+        authView = "credentials";
+        setAuthView("credentials");
+      });
+      document.getElementById("recovery-submit").addEventListener("click", submitAccountRecovery);
+      document.getElementById("recovery-save-retry").addEventListener("click", savePendingRecoveryCode);
+      document.getElementById("recovery-copy").addEventListener("click", async () => {
+        if (!pendingRecovery) return;
+        try {
+          await navigator.clipboard.writeText(pendingRecovery.code);
+          document.getElementById("recovery-card-status").textContent = "Recovery code copied. Store it privately.";
+        } catch (error) {
+          console.error("Could not copy the recovery code.", error);
+          document.getElementById("recovery-card-status").textContent = "Copy failed. Select the code and copy it manually.";
+        }
+      });
+      document.getElementById("recovery-download").addEventListener("click", downloadRecoveryCard);
+      document.getElementById("recovery-continue").addEventListener("click", acknowledgeRecoveryCode);
+    }
+
+    function setAuthView(view) {
+      const credentials = view === "credentials";
+      const recovery = view === "recovery";
+      const saving = view === "saving";
+      const code = view === "code";
+      const title = document.getElementById("modal-title");
+      const description = document.getElementById("modal-description");
+      const usernameLabel = document.getElementById("auth-username-label");
+      const usernameInput = document.getElementById("auth-username");
+      const passwordInput = document.getElementById("auth-password");
+      const passwordLabel = passwordInput.closest(".form-field");
+      const demoNote = authModal.querySelector(".demo-note");
+      usernameLabel.hidden = !credentials;
+      passwordLabel.hidden = !credentials;
+      usernameInput.required = credentials;
+      passwordInput.required = credentials;
+      document.getElementById("auth-submit").hidden = !credentials;
+      document.getElementById("modal-switch").hidden = !credentials;
+      document.getElementById("forgot-password-button").hidden = !credentials || authMode !== "signin";
+      document.getElementById("form-error").hidden = !credentials;
+      document.getElementById("recovery-form-view").hidden = !recovery;
+      document.getElementById("recovery-saving-view").hidden = !saving;
+      document.getElementById("recovery-code-view").hidden = !code;
+      if (demoNote) demoNote.hidden = !credentials;
+      if (recovery) {
+        title.textContent = "Account recovery";
+        description.textContent = "No email is needed; use the recovery code saved when you registered.";
+        document.getElementById("recovery-error").textContent = "";
+      } else if (saving) {
+        title.textContent = "Almost done";
+        description.textContent = "Your account is ready. Save your recovery code before continuing.";
+      } else if (code) {
+        title.textContent = "Keep your account safe";
+        description.textContent = "Save your recovery code before leaving this page.";
+      } else {
+        title.textContent = authMode === "signin" ? "Welcome back" : "Join QORUM";
+        description.textContent = authMode === "signin"
+          ? "Sign in with your username and password."
+          : "Create an account without an email address.";
+      }
+    }
+
+    function generateRecoveryCode() {
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    }
+
+    async function hashRecoveryCode(code) {
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
+      return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function savePendingRecoveryCode() {
+      if (!pendingRecovery || !backendClient) return;
+      const currentRecovery = pendingRecovery;
+      const retryButton = document.getElementById("recovery-save-retry");
+      recoverySaveInProgress = true;
+      retryButton.disabled = true;
+      const hash = await hashRecoveryCode(currentRecovery.code);
+      const { error } = await backendClient.rpc("store_account_recovery_key", {
+        p_recovery_code_hash: hash,
+      });
+      recoverySaveInProgress = false;
+      retryButton.disabled = false;
+      if (pendingRecovery !== currentRecovery) return;
+      if (error) {
+        console.error("Could not securely save the account recovery code.", error);
+        document.getElementById("recovery-saving-message").textContent =
+          "The account was created, but the recovery code has not been saved yet. Keep this window open and try again.";
+        return;
+      }
+      document.getElementById("recovery-card-username").textContent = pendingRecovery.username;
+      document.getElementById("recovery-card-code").textContent = pendingRecovery.code;
+      document.getElementById("recovery-card-status").textContent = "You can also save this code in a password manager.";
+      authView = "code";
+      setAuthView("code");
+    }
+
+    function downloadRecoveryCard() {
+      if (!pendingRecovery) return;
+      const username = pendingRecovery.username;
+      const canvas = document.createElement("canvas");
+      canvas.width = 1200;
+      canvas.height = 620;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        showToast("Could not create the recovery card.");
+        return;
+      }
+      context.fillStyle = "#17181a";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#e9e7e1";
+      context.font = "700 48px system-ui, sans-serif";
+      context.fillText("QORUM account recovery", 72, 112);
+      context.fillStyle = "#a3a29d";
+      context.font = "28px system-ui, sans-serif";
+      context.fillText("Keep this code private. It can reset your password once.", 72, 170);
+      context.fillStyle = "#a3a29d";
+      context.font = "24px system-ui, sans-serif";
+      context.fillText("USERNAME", 72, 260);
+      context.fillStyle = "#e9e7e1";
+      context.font = "600 34px system-ui, sans-serif";
+      context.fillText(pendingRecovery.username, 72, 310);
+      context.fillStyle = "#a3a29d";
+      context.font = "24px system-ui, sans-serif";
+      context.fillText("ONE-TIME RECOVERY CODE", 72, 400);
+      context.fillStyle = "#e9e7e1";
+      context.font = "28px ui-monospace, Consolas, monospace";
+      context.fillText(pendingRecovery.code, 72, 452);
+      context.fillStyle = "#a3a29d";
+      context.font = "20px system-ui, sans-serif";
+      context.fillText("This card does not contain your password.", 72, 540);
+      canvas.toBlob(blob => {
+        if (!blob) {
+          showToast("Could not create the recovery card.");
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `qorum-recovery-${username}.png`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        document.getElementById("recovery-card-status").textContent =
+          "Recovery card downloaded. Keep the image somewhere private.";
+      }, "image/png");
+    }
+
+    function acknowledgeRecoveryCode() {
+      const recoveredUsername = pendingRecovery?.afterRecovery ? pendingRecovery.username : null;
+      pendingRecovery = null;
+      document.getElementById("recovery-card-code").textContent = "";
+      document.getElementById("recovery-card-username").textContent = "";
+      if (recoveredUsername) {
+        authMode = "signin";
+        document.getElementById("auth-username").value = recoveredUsername;
+        document.getElementById("auth-password").value = "";
+        document.getElementById("form-error").textContent = "Password reset. Sign in with your new password.";
+        authView = "credentials";
+        setAuthView("credentials");
+        document.getElementById("auth-password").focus();
+      } else {
+        authModal.classList.remove("open");
+        authView = "credentials";
+        setAuthView("credentials");
+      }
+    }
+
+    function closeAuthModal() {
+      if (recoverySaveInProgress) {
+        showToast("Wait until the recovery code is saved before closing this window.");
+        return;
+      }
+      if (pendingRecovery && !window.confirm("The recovery code is shown only once. If you close now, you may not be able to recover this account. Close anyway?")) {
+        return;
+      }
+      pendingRecovery = null;
+      const code = document.getElementById("recovery-card-code");
+      const username = document.getElementById("recovery-card-username");
+      if (code) code.textContent = "";
+      if (username) username.textContent = "";
+      authModal.classList.remove("open");
+      authView = "credentials";
+      setAuthView("credentials");
+    }
+
+    window.addEventListener("beforeunload", event => {
+      if (!pendingRecovery) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+
+    async function submitAccountRecovery() {
+      if (!backendClient) return;
+      const username = document.getElementById("recovery-username").value.trim();
+      const recoveryCode = document.getElementById("recovery-code").value.trim();
+      const newPassword = document.getElementById("recovery-new-password").value;
+      const errorMessage = document.getElementById("recovery-error");
+      if (!/^[A-Za-z0-9_]{3,24}$/.test(username) || !/^[A-Za-z0-9_-]{43}$/.test(recoveryCode)
+        || newPassword.length < 8 || newPassword.length > 72) {
+        errorMessage.textContent = "Enter a valid username and recovery code, and a password between 8 and 72 characters.";
+        return;
+      }
+
+      const submit = document.getElementById("recovery-submit");
+      submit.disabled = true;
+      errorMessage.textContent = "";
+      const { data, error } = await backendClient.functions.invoke("recover-account", {
+        body: { username, recoveryCode, newPassword },
+      });
+      submit.disabled = false;
+      if (error || !data?.success) {
+        if (error) console.error("Account recovery failed.", error);
+        errorMessage.textContent = data?.error || "The username or recovery code is incorrect, or recovery is temporarily unavailable.";
+        return;
+      }
+      if (typeof data.recoveryCode !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(data.recoveryCode)) {
+        errorMessage.textContent = "The password was changed, but a new recovery code could not be confirmed. Contact the site owner before continuing.";
+        return;
+      }
+      document.getElementById("recovery-code").value = "";
+      document.getElementById("recovery-new-password").value = "";
+      pendingRecovery = { username, code: data.recoveryCode, afterRecovery: true };
+      document.getElementById("recovery-card-username").textContent = username;
+      document.getElementById("recovery-card-code").textContent = data.recoveryCode;
+      document.getElementById("recovery-card-status").textContent = "Your previous recovery code was used. Save this replacement code before signing in.";
+      authView = "code";
+      setAuthView("code");
     }
 
     const gameModal = document.getElementById("game-modal");
@@ -898,7 +1181,7 @@
     const modalSwitch = document.getElementById("modal-switch");
     if (modalSwitch) modalSwitch.addEventListener("click", () => openAuth(authMode === "signin" ? "signup" : "signin"));
     const closeModal = document.getElementById("close-modal");
-    if (closeModal) closeModal.addEventListener("click", () => authModal.classList.remove("open"));
+    if (closeModal) closeModal.addEventListener("click", closeAuthModal);
     const gameClose = document.getElementById("game-close");
     if (gameClose) gameClose.addEventListener("click", closeGame);
     const gameRestart = document.getElementById("game-restart");
@@ -909,11 +1192,11 @@
       if (event.target === gameModal) closeGame();
     });
     if (authModal) authModal.addEventListener("click", event => {
-      if (event.target === authModal) authModal.classList.remove("open");
+      if (event.target === authModal) closeAuthModal();
     });
     document.addEventListener("keydown", event => {
       if (event.key === "Escape") {
-        if (authModal) authModal.classList.remove("open");
+        if (authModal && authModal.classList.contains("open")) closeAuthModal();
         closeGame();
         const sidebar = document.getElementById("sidebar");
         if (sidebar) sidebar.classList.remove("open");
@@ -922,39 +1205,53 @@
     const authForm = document.getElementById("auth-form");
     if (authForm) authForm.addEventListener("submit", async event => {
       event.preventDefault();
+      if (authView !== "credentials") return;
       if (!backendClient) {
         document.getElementById("form-error").textContent = "The account service is unavailable. Check your connection and try again.";
         return;
       }
-      const email = document.getElementById("auth-email").value.trim();
-      const password = document.getElementById("auth-password").value;
       const username = document.getElementById("auth-username").value.trim();
-      if (!email || password.length < 8 || (authMode === "signup" && !/^[A-Za-z0-9_]{3,24}$/.test(username))) {
-        document.getElementById("form-error").textContent = "Enter a valid email, an 8-character password, and a valid username.";
+      const password = document.getElementById("auth-password").value;
+      if (!/^[A-Za-z0-9_]{3,24}$/.test(username) || password.length < 8 || password.length > 72) {
+        document.getElementById("form-error").textContent = "Enter a valid username and a password between 8 and 72 characters.";
         return;
       }
-      const signupOptions = { data: { username } };
-      if (window.location.protocol === "http:" || window.location.protocol === "https:") {
-        signupOptions.emailRedirectTo = window.location.href.split(/[?#]/)[0];
+      const email = `${username.toLowerCase()}@accounts.qorum.invalid`;
+      if (authMode === "signup" && pendingRecovery) {
+        await savePendingRecoveryCode();
+        return;
       }
       const result = authMode === "signup"
-        ? await backendClient.auth.signUp({ email, password, options: signupOptions })
+        ? await backendClient.auth.signUp({ email, password, options: { data: { username } } })
         : await backendClient.auth.signInWithPassword({ email, password });
       if (result.error) {
         console.error("Authentication failed.", result.error);
         const duplicateUsername = result.error.code === "23505" || result.error.message.includes("profiles_username_lower_idx");
         document.getElementById("form-error").textContent = duplicateUsername
           ? "That username is already taken. Please choose another."
-          : result.error.message;
+          : authMode === "signup"
+            ? result.error.message
+            : "Username or password is incorrect.";
+        return;
+      }
+      if (authMode === "signup") {
+        if (!result.data.session || !result.data.user) {
+          document.getElementById("form-error").textContent =
+            "Email confirmation is still enabled in the Supabase project. Ask the site owner to turn it off before registering; no email is collected.";
+          return;
+        }
+        pendingRecovery = { username, code: generateRecoveryCode() };
+        recoverySaveInProgress = true;
+        document.getElementById("auth-password").value = "";
+        await updateProfileUI(result.data.user);
+        authView = "saving";
+        setAuthView("saving");
+        await savePendingRecoveryCode();
         return;
       }
       authModal.classList.remove("open");
-      if (authMode === "signup" && !result.data.session) {
-        showToast("Check your email to confirm your new account.");
-      } else {
-        await updateProfileUI(result.data.user);
-        showToast(authMode === "signin" ? "You are signed in." : "Your QORUM account is ready.");
-      }
+      await updateProfileUI(result.data.user);
+      showToast("You are signed in.");
     });
     const loginButton = document.getElementById("login-button");
     if (loginButton) loginButton.addEventListener("click", () => {
@@ -1023,11 +1320,13 @@
       if (profileLevel) profileLevel.textContent = currentUser ? "Signed in" : "Not signed in";
       if (login) login.textContent = currentUser ? "My account" : "Sign in";
       const nameHeading = document.getElementById("profile-view-name");
-      const emailHeading = document.getElementById("profile-view-email");
+      const signinMethod = document.getElementById("profile-view-signin-method");
       const avatar = document.getElementById("profile-view-avatar");
       const accountStatus = document.getElementById("profile-view-status");
       if (nameHeading) nameHeading.textContent = currentUsername;
-      if (emailHeading) emailHeading.textContent = currentUser?.email || "Sign in to save your profile.";
+      if (signinMethod) signinMethod.textContent = currentUser
+        ? "Username sign-in · Save your recovery code privately"
+        : "Sign in to save your profile.";
       if (avatar) avatar.textContent = currentUser ? currentUsername.slice(0, 1).toUpperCase() : "G";
       if (accountStatus) accountStatus.textContent = currentUser ? "QORUM account · Signed in" : "Guest profile · Sign in to continue";
       const profileSignin = document.getElementById("profile-signin");

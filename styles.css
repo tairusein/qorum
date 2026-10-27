@@ -14,6 +14,7 @@
     }
 
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       min-width: 320px;
@@ -434,6 +435,12 @@
     .modal-submit { width: 100%; margin-top: 8px; padding: 11px; }
     .modal-switch { display: block; margin: 13px auto 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 10px; }
     .form-error { min-height: 16px; margin: 7px 0 0; color: #d99a91; font-size: 10px; }
+    .account-recovery-view h3 { margin: 0 0 5px; font-size: 15px; }
+    .account-recovery-view > p { margin: 5px 0 13px; color: var(--muted); font-size: 10px; }
+    .account-recovery-view .recovery-username-line { margin-top: 16px; }
+    .recovery-username-line strong { color: var(--text); }
+    .recovery-code-value { display: block; overflow-wrap: anywhere; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #191b1f; color: var(--text); font-size: 11px; user-select: all; }
+    .account-recovery-view .profile-note { margin: 12px 0; }
     .mobile-menu { display: none; }
 
     @media (max-width: 1050px) {

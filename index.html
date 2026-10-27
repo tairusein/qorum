@@ -136,10 +136,9 @@
       </span>
       <h2 id="modal-title">Welcome back</h2>
       <p id="modal-description">Sign in to pick up where you left off.</p>
-      <p class="demo-note">Sign up with a valid email address. Email confirmation may be required.</p>
-      <label class="form-field" id="username-field" hidden>Username<input id="auth-username" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" autocomplete="username" placeholder="3-24 letters, numbers, or _"></label>
-      <label class="form-field">Email address<input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" required></label>
-      <label class="form-field">Password<input id="auth-password" type="password" placeholder="At least 8 characters" minlength="8" autocomplete="current-password" required></label>
+      <p class="demo-note">Use a username and password. Save your one-time recovery code somewhere private.</p>
+      <label class="form-field" id="auth-username-label">Username<input id="auth-username" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" autocomplete="username" placeholder="3-24 letters, numbers, or _" required></label>
+      <label class="form-field">Password<input id="auth-password" type="password" placeholder="At least 8 characters" minlength="8" maxlength="72" autocomplete="current-password" required></label>
       <p class="form-error" id="form-error" aria-live="polite"></p>
       <button class="primary-button modal-submit" type="submit" id="auth-submit">Sign in</button>
       <button class="modal-switch" type="button" id="modal-switch">New here? Create an account</button>
