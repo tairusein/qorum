@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#17181a">
+  <title>QORUM — My games</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="index.html" aria-label="QORUM home">
+        <span class="brand-mark"><svg class="ram-mark" viewBox="0 0 128 112" aria-hidden="true">
+          <path class="ram-horn" d="M49 51C36 49 18 45 11 33 3 20 7 7 18 5c12-3 23 6 24 18 1 10-6 17-15 16-7-1-11-7-9-13 1-4 5-6 9-5"/>
+          <path class="ram-horn" d="M79 51c13-2 31-6 38-18 8-13 4-26-7-28-12-3-23 6-24 18-1 10 6 17 15 16 7-1 11-7 9-13-1-4-5-6-9-5"/>
+          <path class="ram-horn-groove" d="M47 48C31 45 16 39 12 28 8 18 12 9 20 8c9-1 17 6 17 15 0 6-4 11-9 11"/><path class="ram-horn-groove" d="M81 48c16-3 31-9 35-20 4-10 0-19-8-20-9-1-17 6-17 15 0 6 4 11 9 11"/>
+          <path class="ram-horn-highlight" d="M14 24C12 16 16 10 22 9c6-1 11 2 14 7"/><path class="ram-horn-highlight" d="M114 24c2-8-2-14-8-15-6-1-11 2-14 7"/>
+          <path class="ram-face" d="M43 40c5-7 13-11 21-11s16 4 21 11l8 25c1 16-12 30-29 40-17-10-30-24-29-40z"/><path class="ram-bridge" d="M64 35c-5 12-6 28-5 42l5 18 5-18c1-14 0-30-5-42z"/>
+          <path class="ram-brow" d="m43 58 16 6m26-6-16 6"/><ellipse class="ram-eye" cx="51" cy="66" rx="6.1" ry="4.3" transform="rotate(16 51 66)"/><ellipse class="ram-eye" cx="77" cy="66" rx="6.1" ry="4.3" transform="rotate(-16 77 66)"/><ellipse class="ram-pupil" cx="52" cy="66" rx="1.5" ry="3"/><ellipse class="ram-pupil" cx="76" cy="66" rx="1.5" ry="3"/>
+          <path class="ram-snout" d="M55 76q9-5 18 0l6 10q-6 7-15 8-9-1-15-8z"/><ellipse class="ram-nostril" cx="59" cy="82" rx="1.6" ry="1.1"/><ellipse class="ram-nostril" cx="69" cy="82" rx="1.6" ry="1.1"/><path class="ram-mouth" d="M64 85v5m-6 1q6 4 12 0"/>
+        </svg></span>
+        <span>QORUM</span>
+      </a>
+      <p class="nav-label">Navigation</p>
+      <nav class="nav-list" aria-label="Main navigation">
+        <a class="nav-button" href="index.html"><span class="nav-icon">⌂</span>Arcade</a>
+        <a class="nav-button active" href="library.html" aria-current="page"><span class="nav-icon">▣</span>My games<span class="nav-count" id="library-count">4</span></a>
+        <a class="nav-button" href="community.html"><span class="nav-icon">◎</span>Community</a>
+        <a class="nav-button" href="profile.html"><span class="nav-icon">◉</span>Profile</a>
+        <a class="nav-button" href="stats.html"><span class="nav-icon">▤</span>Statistics</a>
+      </nav>
+      <div class="sidebar-divider"></div>
+      <div class="friends-heading"><p class="nav-label">Players <span id="online-count">0</span></p></div>
+      <div class="friend-list" id="friend-list"></div>
+      <div class="sidebar-bottom"><div class="profile-card"><span class="avatar">🎮</span><span class="profile-copy"><span class="profile-name" id="profile-name">Guest player</span><span class="profile-level" id="profile-level">Level 1 · Offline</span></span><button type="button" class="profile-menu" aria-label="Account options" id="profile-action">···</button></div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <button type="button" class="icon-button mobile-menu" aria-label="Open menu" id="menu-button">☰</button>
+        <nav class="top-links" aria-label="Site sections"><a class="top-link" href="index.html">Arcade</a><a class="top-link active" href="library.html" aria-current="page">My games</a><a class="top-link" href="community.html">Community</a><a class="top-link" href="profile.html">Profile</a><a class="top-link" href="stats.html">Statistics</a></nav>
+        <div class="top-actions"><label class="search-box" aria-label="Search games"><span aria-hidden="true">⌕</span><input id="game-search" type="search" placeholder="Search games..." autocomplete="off"></label><button type="button" class="icon-button" id="notifications-button" aria-label="Notifications">♧</button><button type="button" class="login-button" id="login-button">Sign in</button></div>
+      </header>
+      <div class="content">
+        <section class="page-view active">
+          <p class="eyebrow"><span class="live-pip"></span>YOUR COLLECTION</p>
+          <h1 class="store-view-title">My games</h1>
+          <p class="store-view-subtitle">A quiet place for your favorite quick breaks.</p>
+          <div class="library-summary"><strong id="library-total">4</strong><span class="summary-copy"><span>free games, ready to play</span><span>Your high scores are saved on this device.</span></span><a class="text-button" href="index.html">Browse arcade ↗</a></div>
+          <div class="game-grid" id="library-games"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="modal-backdrop" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <form class="modal" id="auth-form">
+      <button type="button" class="modal-close" id="close-modal" aria-label="Close">×</button>
+      <span class="modal-mark"><svg class="ram-mark" viewBox="0 0 128 112" aria-hidden="true"><path class="ram-horn" d="M49 51C36 49 18 45 11 33 3 20 7 7 18 5c12-3 23 6 24 18 1 10-6 17-15 16-7-1-11-7-9-13 1-4 5-6 9-5"/><path class="ram-horn" d="M79 51c13-2 31-6 38-18 8-13 4-26-7-28-12-3-23 6-24 18-1 10 6 17 15 16 7-1 11-7 9-13-1-4-5-6-9-5"/><path class="ram-horn-groove" d="M47 48C31 45 16 39 12 28 8 18 12 9 20 8c9-1 17 6 17 15 0 6-4 11-9 11"/><path class="ram-horn-groove" d="M81 48c16-3 31-9 35-20 4-10 0-19-8-20-9-1-17 6-17 15 0 6 4 11 9 11"/><path class="ram-horn-highlight" d="M14 24C12 16 16 10 22 9c6-1 11 2 14 7"/><path class="ram-horn-highlight" d="M114 24c2-8-2-14-8-15-6-1-11 2-14 7"/><path class="ram-face" d="M43 40c5-7 13-11 21-11s16 4 21 11l8 25c1 16-12 30-29 40-17-10-30-24-29-40z"/><path class="ram-bridge" d="M64 35c-5 12-6 28-5 42l5 18 5-18c1-14 0-30-5-42z"/><path class="ram-brow" d="m43 58 16 6m26-6-16 6"/><ellipse class="ram-eye" cx="51" cy="66" rx="6.1" ry="4.3" transform="rotate(16 51 66)"/><ellipse class="ram-eye" cx="77" cy="66" rx="6.1" ry="4.3" transform="rotate(-16 77 66)"/><ellipse class="ram-pupil" cx="52" cy="66" rx="1.5" ry="3"/><ellipse class="ram-pupil" cx="76" cy="66" rx="1.5" ry="3"/><path class="ram-snout" d="M55 76q9-5 18 0l6 10q-6 7-15 8-9-1-15-8z"/><ellipse class="ram-nostril" cx="59" cy="82" rx="1.6" ry="1.1"/><ellipse class="ram-nostril" cx="69" cy="82" rx="1.6" ry="1.1"/><path class="ram-mouth" d="M64 85v5m-6 1q6 4 12 0"/></svg></span>
+      <h2 id="modal-title">Welcome back</h2><p id="modal-description">Sign in to pick up where you left off.</p><p class="demo-note">Sign up with a valid email address. Email confirmation may be required.</p>
+      <label class="form-field" id="username-field" hidden>Username<input id="auth-username" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" autocomplete="username" placeholder="3-24 letters, numbers, or _"></label>
+      <label class="form-field">Email address<input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" required></label><label class="form-field">Password<input id="auth-password" type="password" placeholder="At least 8 characters" minlength="8" autocomplete="current-password" required></label>
+      <p class="form-error" id="form-error" aria-live="polite"></p><button class="primary-button modal-submit" type="submit" id="auth-submit">Sign in</button><button class="modal-switch" type="button" id="modal-switch">New here? Create an account</button>
+    </form>
+  </div>
+  <div class="game-backdrop" id="game-modal" role="dialog" aria-modal="true" aria-labelledby="game-title"><section class="game-modal"><header class="game-modal-header"><div><p class="eyebrow"><span class="live-pip"></span>QORUM ARCADE</p><h2 id="game-title">Snake</h2><p id="game-description"></p></div><button type="button" class="icon-button" id="game-restart" aria-label="Restart game">↻</button><button type="button" class="icon-button" id="game-close" aria-label="Close game">×</button></header><div id="game-stage" class="game-stage"></div></section></div>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="config.js"></script>
+  <script defer src="app.js"></script>
+</body>
+</html>
