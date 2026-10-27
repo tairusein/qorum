@@ -2,7 +2,7 @@
 
 ## Backend
 
-QORUM uses Supabase for username/password accounts, private direct messages, play-time sessions, and aggregate game statistics. The login is backed by an internal, reserved `.invalid` email alias; players never enter or receive email. Passwords are handled by Supabase Auth and are never stored in the QORUM database as plain text.
+QORUM uses Supabase for username/password accounts, private direct messages, play-time sessions, and aggregate game statistics. Supabase Auth requires an email-shaped login identifier, so QORUM derives one from each username using the site's `tairusein.github.io` domain. Players never enter or receive email. Passwords are handled by Supabase Auth and are never stored in the QORUM database as plain text.
 
 1. The database migrations in `supabase/migrations/` are applied to the QORUM Supabase project (`snwmsqkpzetqnaniltdf`, EU West).
 2. The `recover-account` Edge Function is deployed to this project. It uses Supabase's server-side secret key, which Supabase provides to Edge Functions; never add that key to the website or repository. If you change the function source later, redeploy it to Supabase.

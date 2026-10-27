@@ -244,6 +244,10 @@
       return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
     }
 
+    function usernameAuthEmail(username) {
+      return `${username.toLowerCase()}@tairusein.github.io`;
+    }
+
     async function hashRecoveryCode(code) {
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
       return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
@@ -1216,14 +1220,29 @@
         document.getElementById("form-error").textContent = "Enter a valid username and a password between 8 and 72 characters.";
         return;
       }
-      const email = `${username.toLowerCase()}@accounts.qorum.invalid`;
       if (authMode === "signup" && pendingRecovery) {
         await savePendingRecoveryCode();
         return;
       }
-      const result = authMode === "signup"
-        ? await backendClient.auth.signUp({ email, password, options: { data: { username } } })
-        : await backendClient.auth.signInWithPassword({ email, password });
+      let result;
+      if (authMode === "signup") {
+        result = await backendClient.auth.signUp({
+          email: usernameAuthEmail(username),
+          password,
+          options: { data: { username } },
+        });
+      } else {
+        result = await backendClient.auth.signInWithPassword({
+          email: usernameAuthEmail(username),
+          password,
+        });
+        if (result.error) {
+          result = await backendClient.auth.signInWithPassword({
+            email: `${username.toLowerCase()}@accounts.qorum.invalid`,
+            password,
+          });
+        }
+      }
       if (result.error) {
         console.error("Authentication failed.", result.error);
         const duplicateUsername = result.error.code === "23505" || result.error.message.includes("profiles_username_lower_idx");
