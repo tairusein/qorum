@@ -239,13 +239,20 @@
       }
     }
 
-    function generateRecoveryCode() {
-      const bytes = crypto.getRandomValues(new Uint8Array(32));
-      return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-    }
-
     function usernameAuthEmail(username) {
       return `${username.toLowerCase()}@tairusein.github.io`;
+    }
+
+    async function functionErrorMessage(error, fallback) {
+      if (typeof error?.context?.json === "function") {
+        try {
+          const response = await error.context.json();
+          if (typeof response?.error === "string") return response.error;
+        } catch (parseError) {
+          console.error("Could not read the account service error.", parseError);
+        }
+      }
+      return error?.message || fallback;
     }
 
     async function hashRecoveryCode(code) {
@@ -333,6 +340,7 @@
 
     function acknowledgeRecoveryCode() {
       const recoveredUsername = pendingRecovery?.afterRecovery ? pendingRecovery.username : null;
+      const loginAfterSignup = pendingRecovery?.loginAfterSignup ? pendingRecovery.username : null;
       pendingRecovery = null;
       document.getElementById("recovery-card-code").textContent = "";
       document.getElementById("recovery-card-username").textContent = "";
@@ -341,6 +349,14 @@
         document.getElementById("auth-username").value = recoveredUsername;
         document.getElementById("auth-password").value = "";
         document.getElementById("form-error").textContent = "Password reset. Sign in with your new password.";
+        authView = "credentials";
+        setAuthView("credentials");
+        document.getElementById("auth-password").focus();
+      } else if (loginAfterSignup) {
+        authMode = "signin";
+        document.getElementById("auth-username").value = loginAfterSignup;
+        document.getElementById("auth-password").value = "";
+        document.getElementById("form-error").textContent = "Your account is ready. Sign in with your username and password.";
         authView = "credentials";
         setAuthView("credentials");
         document.getElementById("auth-password").focus();
@@ -1220,17 +1236,36 @@
         document.getElementById("form-error").textContent = "Enter a valid username and a password between 8 and 72 characters.";
         return;
       }
-      if (authMode === "signup" && pendingRecovery) {
-        await savePendingRecoveryCode();
-        return;
-      }
       let result;
       if (authMode === "signup") {
-        result = await backendClient.auth.signUp({
+        const { data, error } = await backendClient.functions.invoke("register-account", {
+          body: { username, password },
+        });
+        if (error || !data?.success || typeof data.recoveryCode !== "string"
+          || !/^[A-Za-z0-9_-]{43}$/.test(data.recoveryCode)) {
+          if (error) console.error("Account registration failed.", error);
+          document.getElementById("form-error").textContent = error
+            ? await functionErrorMessage(error, "The account could not be created. Please try again.")
+            : data?.error || "The account could not be safely initialized. Please try again.";
+          return;
+        }
+        pendingRecovery = { username, code: data.recoveryCode };
+        result = await backendClient.auth.signInWithPassword({
           email: usernameAuthEmail(username),
           password,
-          options: { data: { username } },
         });
+        if (result.error) {
+          console.error("The account was created, but automatic sign-in failed.", result.error);
+          pendingRecovery.loginAfterSignup = true;
+          document.getElementById("auth-password").value = "";
+          document.getElementById("recovery-card-username").textContent = username;
+          document.getElementById("recovery-card-code").textContent = pendingRecovery.code;
+          document.getElementById("recovery-card-status").textContent =
+            "The code is saved securely. Automatic sign-in failed; save this code, then sign in with your username and password.";
+          authView = "code";
+          setAuthView("code");
+          return;
+        }
       } else {
         result = await backendClient.auth.signInWithPassword({
           email: usernameAuthEmail(username),
@@ -1254,13 +1289,6 @@
         return;
       }
       if (authMode === "signup") {
-        if (!result.data.session || !result.data.user) {
-          document.getElementById("form-error").textContent =
-            "Email confirmation is still enabled in the Supabase project. Ask the site owner to turn it off before registering; no email is collected.";
-          return;
-        }
-        pendingRecovery = { username, code: generateRecoveryCode() };
-        recoverySaveInProgress = true;
         document.getElementById("auth-password").value = "";
         await updateProfileUI(result.data.user);
         authView = "saving";
