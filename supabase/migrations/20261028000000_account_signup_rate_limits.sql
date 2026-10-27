@@ -17,7 +17,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  current_time timestamptz := clock_timestamp();
+  attempt_now timestamptz := clock_timestamp();
   recent_attempts integer;
 begin
   if p_ip_hash is null or p_ip_hash !~ '^[0-9a-f]{64}$' then
@@ -27,19 +27,19 @@ begin
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_ip_hash, 0));
 
   delete from public.account_signup_attempts
-  where attempted_at < current_time - interval '24 hours';
+  where attempted_at < attempt_now - interval '24 hours';
 
   select count(*) into recent_attempts
   from public.account_signup_attempts
   where ip_hash = p_ip_hash
-    and attempted_at > current_time - interval '1 hour';
+    and attempted_at > attempt_now - interval '1 hour';
 
   if recent_attempts >= 5 then
     return false;
   end if;
 
   insert into public.account_signup_attempts (ip_hash, attempted_at)
-  values (p_ip_hash, current_time);
+  values (p_ip_hash, attempt_now);
   return true;
 end;
 $$;
