@@ -37,7 +37,7 @@
       <p class="nav-label">Discover</p>
       <nav class="nav-list" aria-label="Main navigation">
         <a class="nav-button active" href="index.html" aria-current="page"><span class="nav-icon">⌂</span>Arcade</a>
-        <a class="nav-button" href="library.html"><span class="nav-icon">▣</span>My games<span class="nav-count" id="library-count">4</span></a>
+        <a class="nav-button" href="library.html"><span class="nav-icon">▣</span>My games<span class="nav-count" id="library-count">8</span></a>
         <a class="nav-button" href="community.html"><span class="nav-icon">◎</span>Community</a>
         <a class="nav-button" href="profile.html"><span class="nav-icon">◉</span>Profile</a>
         <a class="nav-button" href="stats.html"><span class="nav-icon">▤</span>Statistics</a>
@@ -82,12 +82,16 @@
           <div class="hero">
             <div class="hero-content">
               <p class="eyebrow"><span class="live-pip"></span>A little arcade · Always free</p>
-              <h1>Small games.<br>Big breaks.</h1>
-              <p class="hero-description">Four easy-to-pick-up classics for a quiet moment. No downloads, no fuss — just press play.</p>
-              <div class="hero-meta"><span class="tag">4 MINI GAMES</span><span class="tag">PLAY IN YOUR BROWSER</span></div>
+              <h1>Small games.<br>Online matches.</h1>
+              <p class="hero-description">Eight arcade and tactical games: four upgraded solo classics and four online multiplayer arenas to play with friends.</p>
+              <div class="hero-meta">
+                <span class="tag">8 MINI GAMES</span>
+                <span class="tag tag-mp">4 ONLINE 1v1</span>
+                <span class="tag">PLAY IN YOUR BROWSER</span>
+              </div>
               <div class="hero-cta-row">
-                <button class="primary-button" type="button" data-play="snake">Play Snake</button>
-                <span class="hero-price">Free to play</span>
+                <button class="primary-button" type="button" data-play="tic-tac-toe">Play Online 1v1</button>
+                <button class="secondary-button" type="button" data-play="snake">Play Snake</button>
                 <a class="secondary-button button-link" href="#featured-games">Browse games ↓</a>
               </div>
             </div>
@@ -100,8 +104,27 @@
             </svg>
           </div>
 
+          <div class="mp-quick-bar" id="mp-quick-bar">
+            <div class="mp-quick-info">
+              <div class="mp-quick-icon" aria-hidden="true">🎮</div>
+              <div>
+                <strong>Play online with friends</strong>
+                <span id="lobby-live-hint">Enter a 5-character room code or create a room inside any online game</span>
+              </div>
+            </div>
+            <form class="mp-quick-actions" id="quick-join-form">
+              <input id="quick-room-code" class="mp-code-input" type="text" maxlength="8" placeholder="Room code" autocomplete="off" aria-label="Room code">
+              <button class="primary-button" type="submit">Join room</button>
+            </form>
+          </div>
+
           <div class="section-heading">
-            <div><h2>Pick a game</h2><p>Simple rules, instant play. Find your new little favorite.</p></div>
+            <div><h2>Pick a game</h2><p>Online duels with friends and upgraded solo arcade classics.</p></div>
+          </div>
+          <div class="filter-row" id="game-filters">
+            <button class="filter-chip active" type="button" data-filter="all">All games (8)</button>
+            <button class="filter-chip" type="button" data-filter="multiplayer">Multiplayer · Online (4)</button>
+            <button class="filter-chip" type="button" data-filter="solo">Solo · Arcade (4)</button>
           </div>
           <div class="game-grid" id="featured-games"></div>
         </section>
