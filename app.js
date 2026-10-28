@@ -669,6 +669,8 @@ function setLanguage(language) {
   localizeTree();
   renderGames();
   refreshOpenRoomsUI();
+  if (document.getElementById("public-stats")) void loadPublicPlaytime();
+  if (document.getElementById("profile-game-times")) void updateProfileUI(currentUser);
 }
 
 const languageObserver = new MutationObserver(records => {
@@ -4265,971 +4267,931 @@ function startTankBrawl(game) {
   };
 }
 
-
 let trackingAttempt = 0;
 
-async function finishGameTracking() {
-  trackingAttempt += 1;
-  if (localPlaytimeTimer) {
-    clearInterval(localPlaytimeTimer);
-    localPlaytimeTimer = null;
+async function finishGameTracking(cancelPending = true) {
+  if (cancelPending) trackingAttempt += 1;
+  window.clearInterval(trackingHeartbeat);
+  trackingHeartbeat = null;
+  if (localPlayStartMs && activeGameId) {
+    const elapsedSec = Math.max(0, Math.floor((Date.now() - localPlayStartMs) / 1000));
+    localPlayStartMs = 0;
+    if (elapsedSec > 0) {
+      personalGameSeconds[activeGameId] = (personalGameSeconds[activeGameId] || 0) + elapsedSec;
+      localStorage.setItem(`qorum-playtime-${activeGameId}`, String(personalGameSeconds[activeGameId]));
+      renderGames();
+    }
   }
-  const sessionId = activeSessionId;
-  activeSessionId = null;
-
-  if (!sessionId || !supabaseClient) return;
-
-  await supabaseClient.rpc("end_game_session", {
-    p_session_id: sessionId,
-  });
-
-  loadPersonalPlaytime();
-  loadPublicPlaytime();
+  const sessionId = activeTrackingSessionId;
+  activeTrackingSessionId = null;
+  if (!sessionId || !backendClient || !currentUser) return;
+  const { error } = await backendClient.rpc("finish_game_session", { p_session_id: sessionId });
+  if (error) {
+    console.error("Could not save the game session.", error);
+    showToast("Could not save this play session. Please try again.");
+  }
+  await loadPersonalPlaytime();
 }
-
-const legacyDbGameIds = new Set(["snake", "sky-hop", "pocket-pong", "memory-garden"]);
 
 async function startGameTracking(gameId) {
-  await finishGameTracking();
   const attempt = ++trackingAttempt;
-
-  if (localPlaytimeTimer) clearInterval(localPlaytimeTimer);
-  localPlaytimeTimer = setInterval(() => {
-    try {
-      const stats = JSON.parse(localStorage.getItem("qorum_local_playtime") || "{}");
-      stats[gameId] = (stats[gameId] || 0) + 5;
-      localStorage.setItem("qorum_local_playtime", JSON.stringify(stats));
-    } catch {}
-  }, 5000);
-
-  if (!supabaseClient) return;
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  if (!sessionData.session || attempt !== trackingAttempt) return;
-
-  const { data, error } = await supabaseClient.rpc("start_game_session", {
-    p_game_id: gameId,
-  });
-
-  if (error && !legacyDbGameIds.has(gameId)) {
+  await finishGameTracking(false);
+  localPlayStartMs = Date.now();
+  if (backendClient && !currentUser) showToast("Sign in to record your play time.");
+  if (!backendClient || !currentUser || activeGameId !== gameId || attempt !== trackingAttempt) return;
+  const { data: sessionId, error } = await backendClient.rpc("start_game_session", { p_game_id: gameId });
+  if (error) {
+    if (!legacyDbGameIds.has(gameId)) return;
+    console.error("Could not start the game timer.", error);
+    showToast("Game time could not be recorded.");
     return;
   }
-
-  if (!error && data && attempt === trackingAttempt && activeGameId === gameId) {
-    activeSessionId = data;
-  } else if (!error && data) {
-    await supabaseClient.rpc("end_game_session", { p_session_id: data });
+  if (activeGameId !== gameId || attempt !== trackingAttempt) {
+    const { error: finishError } = await backendClient.rpc("finish_game_session", { p_session_id: sessionId });
+    if (finishError) console.error("Could not close the interrupted game session.", finishError);
+    return;
   }
+  activeTrackingSessionId = sessionId;
+  trackingHeartbeat = window.setInterval(async () => {
+    if (!activeTrackingSessionId || !currentUser) return;
+    const { error: heartbeatError } = await backendClient.rpc("heartbeat_game_session", {
+      p_session_id: activeTrackingSessionId
+    });
+    if (heartbeatError) {
+      console.error("Could not update the game timer.", heartbeatError);
+      showToast("Play-time tracking was interrupted.");
+      window.clearInterval(trackingHeartbeat);
+      trackingHeartbeat = null;
+    }
+  }, 30_000);
 }
 
-function renderChatMessage(message, currentUserId) {
-  if (!chatMessages) return;
+function renderChatMessage(message) {
+  const messages = document.getElementById("chat-messages");
+  if (!messages || messages.querySelector(`[data-message-id="${message.id}"]`)) return;
+  const emptyState = messages.querySelector(".empty-state");
+  if (emptyState) emptyState.remove();
   const item = document.createElement("div");
-  const isSent = message.sender_id === currentUserId;
-  item.className = `message${isSent ? " sent" : ""}`;
+  item.className = `message${currentUser && message.sender_id === currentUser.id ? " mine" : ""}`;
+  item.dataset.messageId = message.id;
 
-  const rawBody = String(message.body || "");
-  const inviteMatch = rawBody.match(/\[QORUM_INVITE:([a-z0-9-]+):([A-Z0-9]+)\]/i);
+  const rawContent = String(message.content || "");
+  const inviteMatch = /\[QORUM_INVITE:([a-z0-9-]+):([A-Z0-9]+)\]/i.exec(rawContent);
+  const cleanText = rawContent.replace(/\[QORUM_INVITE:[^\]]+\]/gi, "").trim();
+  const textSpan = document.createElement("div");
+  textSpan.textContent = cleanText || rawContent;
+  item.append(textSpan);
 
   if (inviteMatch) {
-    const invitedGameId = inviteMatch[1];
-    const invitedRoom = inviteMatch[2].toUpperCase();
-    const gameObj = games.find(g => g.id === invitedGameId);
-    const cleanText = rawBody.replace(/\[QORUM_INVITE:[^\]]+\]/gi, "").trim();
-
-    const textP = document.createElement("p");
-    textP.textContent = cleanText || `🎮 ${translatedValue("Game invitation:")} ${translatedValue(gameObj ? gameObj.title : invitedGameId)}`;
-    item.appendChild(textP);
-
+    const [, invGameId, invRoom] = inviteMatch;
     const joinBtn = document.createElement("button");
     joinBtn.type = "button";
-    joinBtn.className = "primary-button small-button";
-    joinBtn.style.marginTop = "8px";
-    joinBtn.textContent = `${translatedValue("Join room")} ${invitedRoom} →`;
-    joinBtn.addEventListener("click", () => {
-      if (document.getElementById("game-modal")) {
-        launchGame(invitedGameId, invitedRoom);
-      } else {
-        window.location.href = `index.html?game=${encodeURIComponent(invitedGameId)}&room=${encodeURIComponent(invitedRoom)}`;
-      }
-    });
-    item.appendChild(joinBtn);
-  } else {
-    item.textContent = rawBody;
+    joinBtn.className = "message-invite-btn";
+    joinBtn.dataset.joinGame = invGameId;
+    joinBtn.dataset.joinRoom = invRoom.toUpperCase();
+    joinBtn.textContent = `🎮 ${translatedValue("Join room")} ${invRoom.toUpperCase()}`;
+    item.append(joinBtn);
   }
 
-  chatMessages.appendChild(item);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+  const time = document.createElement("span");
+  time.className = "message-time";
+  time.textContent = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(new Date(message.created_at));
+  item.append(time);
+  messages.append(item);
+  messages.scrollTop = messages.scrollHeight;
 }
 
-async function loadConversation(partnerId, partnerName, avatarPath = "") {
-  if (!supabaseClient || !chatMessages) return;
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  const user = sessionData.session?.user;
-
-  if (!user) {
+async function loadConversation(userId, username, avatarPath = null) {
+  if (!backendClient || !currentUser) {
+    showToast("Sign in to message other QORUM players.");
     openAuth("signin");
     return;
   }
-
-  activeChatUserId = partnerId;
-  activeChatUsername = partnerName;
-  if (chatPartnerName) chatPartnerName.textContent = partnerName;
-  if (chatPartnerStatus) chatPartnerStatus.textContent = translatedValue("Direct messages saved in Qorum");
-  setAvatarContent(chatPartnerAvatar, partnerName, avatarPath);
-  if (chatInput) chatInput.disabled = false;
-  if (chatSend) chatSend.disabled = false;
-
-  const { data, error } = await supabaseClient
+  const ownerId = currentUser.id;
+  activeChatUserId = userId;
+  const title = document.getElementById("chat-title");
+  const status = document.getElementById("chat-status");
+  const avatar = document.getElementById("chat-avatar");
+  const messages = document.getElementById("chat-messages");
+  const input = document.getElementById("chat-input");
+  const submit = document.querySelector("#chat-form button[type='submit']");
+  if (!title || !messages) return;
+  title.textContent = username;
+  if (status) status.textContent = translatedValue("Direct messages");
+  setAvatar(avatar, username, avatarPath);
+  if (input) input.disabled = false;
+  if (submit) submit.disabled = false;
+  document.querySelectorAll(".friend").forEach(friend => {
+    friend.classList.toggle("selected", friend.dataset.userId === userId);
+  });
+  messages.replaceChildren();
+  const { data, error } = await backendClient
     .from("direct_messages")
-    .select("id, sender_id, recipient_id, body, created_at")
-    .or(`and(sender_id.eq.${user.id},recipient_id.eq.${partnerId}),and(sender_id.eq.${partnerId},recipient_id.eq.${user.id})`)
-    .order("created_at", { ascending: true })
+    .select("id,sender_id,recipient_id,content,created_at")
+    .or(`and(sender_id.eq.${currentUser.id},recipient_id.eq.${userId}),and(sender_id.eq.${userId},recipient_id.eq.${currentUser.id})`)
+    .order("created_at", { ascending: false })
     .limit(100);
-
-  chatMessages.innerHTML = "";
-
   if (error) {
-    chatMessages.innerHTML = `<div class="message">${escapeHtml(error.message)}</div>`;
+    console.error("Could not load the conversation.", error);
+    showToast("Messages could not be loaded.");
     return;
   }
-
-  if (!data.length) {
-    chatMessages.innerHTML = `<div class="message">${translatedValue("No messages with")} ${escapeHtml(partnerName)} ${translatedValue("yet. Say hello.")}</div>`;
-  } else {
-    data.forEach((message) => renderChatMessage(message, user.id));
-  }
-
-  if (chatChannel) {
-    supabaseClient.removeChannel(chatChannel);
-  }
-
-  chatChannel = supabaseClient
-    .channel(`dm-${[user.id, partnerId].sort().join("-")}`)
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "direct_messages" },
-      (payload) => {
-        const msg = payload.new;
-        const belongsHere =
-          (msg.sender_id === user.id && msg.recipient_id === partnerId) ||
-          (msg.sender_id === partnerId && msg.recipient_id === user.id);
-
-        if (belongsHere) {
-          renderChatMessage(msg, user.id);
-        }
-      },
-    )
+  if (!currentUser || currentUser.id !== ownerId) return;
+  if (activeChatUserId !== userId) return;
+  data.reverse().forEach(renderChatMessage);
+  if (!data.length) messages.innerHTML = `<div class="empty-state">${translatedValue("Start the conversation with a message.")}</div>`;
+  messages.scrollTop = messages.scrollHeight;
+  if (activeChatChannel) await backendClient.removeChannel(activeChatChannel);
+  activeChatChannel = backendClient.channel(`messages:${currentUser.id}:${userId}`)
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "direct_messages",
+      filter: `recipient_id=eq.${currentUser.id}`
+    }, payload => {
+      if (payload.new.sender_id === activeChatUserId) renderChatMessage(payload.new);
+    })
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "direct_messages",
+      filter: `sender_id=eq.${currentUser.id}`
+    }, payload => {
+      if (payload.new.recipient_id === activeChatUserId) renderChatMessage(payload.new);
+    })
     .subscribe();
 }
 
-function renderPublicChatMessage(message, currentUserId) {
-  if (!publicChatMessages) return;
-  const emptyNote = publicChatMessages.querySelector(".public-chat-empty");
-  if (emptyNote) emptyNote.remove();
+function renderPublicChatMessage(message) {
+  const messages = document.getElementById("public-chat-messages");
+  if (!messages || messages.querySelector(`[data-message-id="${message.id}"]`)) return;
+  const emptyState = messages.querySelector(".empty-state");
+  if (emptyState) emptyState.remove();
 
+  const profile = Array.isArray(message.profiles) ? message.profiles[0] : message.profiles;
   const item = document.createElement("article");
-  const isOwn = Boolean(currentUserId && message.sender_id === currentUserId);
-  item.className = `public-message${isOwn ? " own" : ""}`;
-
+  item.className = "message public-message";
+  item.dataset.messageId = message.id;
   const avatar = document.createElement("span");
-  avatar.className = "avatar small";
-  setAvatarContent(avatar, message.sender_username || "Player", message.sender_avatar || "");
-
-  const content = document.createElement("div");
-  content.className = "public-message-body";
-
-  const meta = document.createElement("div");
-  meta.className = "public-message-meta";
-
-  const author = document.createElement("strong");
-  author.textContent = message.sender_username || "Player";
-
+  avatar.className = "avatar";
+  setAvatar(avatar, profile?.username || "QORUM player", profile?.avatar_path);
+  const copy = document.createElement("div");
+  copy.className = "public-message-copy";
+  const name = document.createElement("strong");
+  name.textContent = profile?.username || "QORUM player";
   const time = document.createElement("span");
-  time.textContent = message.created_at
-    ? new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : "";
-
+  time.className = "message-time";
+  time.textContent = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" })
+    .format(new Date(message.created_at));
   const text = document.createElement("p");
-  text.textContent = message.body;
-
-  meta.append(author, time);
-  content.append(meta, text);
-  item.append(avatar, content);
-  publicChatMessages.appendChild(item);
-  publicChatMessages.scrollTop = publicChatMessages.scrollHeight;
+  text.className = "public-message-text";
+  text.textContent = message.content;
+  copy.append(name, time, text);
+  item.append(avatar, copy);
+  messages.append(item);
+  while (messages.children.length > 100) messages.firstElementChild.remove();
+  messages.scrollTop = messages.scrollHeight;
 }
 
 async function loadPublicChatMessages() {
-  if (!supabaseClient || !publicChatMessages) return;
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  const currentUserId = sessionData.session?.user?.id || null;
-
-  const { data, error } = await supabaseClient
-    .from("public_messages")
-    .select("id, sender_id, body, created_at")
-    .order("created_at", { ascending: true })
-    .limit(80);
-
+  const messages = document.getElementById("public-chat-messages");
+  if (!messages || !backendClient) return;
+  const { data, error } = await backendClient
+    .from("public_chat_messages")
+    .select("id,sender_id,content,created_at,profiles(username,avatar_path)")
+    .order("created_at", { ascending: false })
+    .limit(100);
   if (error) {
-    if (publicChatStatus) {
-      publicChatStatus.textContent = translatedValue("Community chat will appear after the public messages update runs.");
-    }
+    console.error("Could not load the public community chat.", error);
+    messages.replaceChildren();
+    const notice = document.createElement("div");
+    notice.className = "empty-state";
+    notice.textContent = translatedValue("Community chat is temporarily unavailable.");
+    messages.append(notice);
     return;
   }
+  messages.replaceChildren();
+  if (!data.length) {
+    const emptyState = document.createElement("div");
+    emptyState.className = "empty-state";
+    emptyState.textContent = translatedValue("No messages yet. Start the conversation.");
+    messages.append(emptyState);
+  } else {
+    data.reverse().forEach(renderPublicChatMessage);
+  }
+  messages.scrollTop = messages.scrollHeight;
+}
 
-  const senderIds = [...new Set((data || []).map((item) => item.sender_id).filter(Boolean))];
-  const profileMap = new Map();
+function initializePublicChat() {
+  const form = document.getElementById("public-chat-form");
+  const messages = document.getElementById("public-chat-messages");
+  if (!form || !messages || !backendClient) return;
 
-  if (senderIds.length) {
-    const { data: profiles } = await supabaseClient
-      .from("profiles")
-      .select("id, username, avatar_path")
-      .in("id", senderIds);
-
-    (profiles || []).forEach((profile) => {
-      profileMap.set(profile.id, profile);
+  void loadPublicChatMessages();
+  if (publicChatChannel) return;
+  publicChatChannel = backendClient.channel("public-community-chat")
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "public_chat_messages",
+    }, () => {
+      void loadPublicChatMessages();
+    })
+    .subscribe(status => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.error("The public community chat realtime connection failed.", status);
+        showToast("Live chat updates are temporarily unavailable.");
+      }
     });
-  }
 
-  publicChatMessages.innerHTML = "";
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const input = document.getElementById("public-chat-input");
+    const submit = form.querySelector("button[type='submit']");
+    const content = input.value.trim();
+    if (!currentUser) {
+      showToast("Sign in to send a message in community chat.");
+      openAuth("signin");
+      return;
+    }
+    if (!content || content.length > 500) return;
 
-  if (!data || !data.length) {
-    const empty = document.createElement("div");
-    empty.className = "message public-chat-empty";
-    empty.textContent = translatedValue("No messages in the community room yet. Say hello.");
-    publicChatMessages.appendChild(empty);
-    return;
-  }
-
-  data.forEach((message) => {
-    const profile = profileMap.get(message.sender_id);
-    renderPublicChatMessage(
-      {
-        ...message,
-        sender_username: profile?.username || "Player",
-        sender_avatar: profile?.avatar_path || "",
-      },
-      currentUserId,
-    );
+    submit.disabled = true;
+    const { data, error } = await backendClient
+      .from("public_chat_messages")
+      .insert({ sender_id: currentUser.id, content })
+      .select("id,sender_id,content,created_at,profiles(username,avatar_path)")
+      .single();
+    submit.disabled = !currentUser;
+    if (error) {
+      console.error("Could not send a public community chat message.", error);
+      showToast(error.message.includes("Please wait")
+        ? "Please wait a moment before sending another message."
+        : "Your message could not be sent.");
+      return;
+    }
+    renderPublicChatMessage(data);
+    input.value = "";
   });
 }
 
-async function initializePublicChat() {
-  if (!publicChatMessages) return;
-  await initSupabase();
-
-  if (!supabaseClient) {
-    if (publicChatStatus) publicChatStatus.textContent = translatedValue("Public room visible to everyone on Qorum");
-    return;
-  }
-
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  const user = sessionData.session?.user || null;
-
-  if (publicChatInput) publicChatInput.disabled = !user;
-  if (publicChatSend) publicChatSend.disabled = !user;
-  if (publicChatStatus) {
-    publicChatStatus.textContent = user
-      ? translatedValue("Public room visible to everyone on Qorum")
-      : translatedValue("Sign in to write in the community chat.");
-  }
-
-  await loadPublicChatMessages();
-
-  if (publicChatChannel) {
-    supabaseClient.removeChannel(publicChatChannel);
-  }
-
-  publicChatChannel = supabaseClient
-    .channel("public-community-room")
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "public_messages" },
-      async (payload) => {
-        const message = payload.new;
-        const { data: profile } = await supabaseClient
-          .from("profiles")
-          .select("username, avatar_path")
-          .eq("id", message.sender_id)
-          .maybeSingle();
-        const { data: latestSession } = await supabaseClient.auth.getSession();
-
-        renderPublicChatMessage(
-          {
-            ...message,
-            sender_username: profile?.username || "Player",
-            sender_avatar: profile?.avatar_path || "",
-          },
-          latestSession.session?.user?.id || null,
-        );
-      },
-    )
-    .subscribe();
-}
-
-function createPlayerButton(player, currentUserId, selectFirst = false) {
+function createPlayerButton(player) {
   const button = document.createElement("button");
-  button.className = `friend${selectFirst ? " active" : ""}`;
   button.type = "button";
+  button.className = "friend";
   button.dataset.userId = player.id;
   button.dataset.username = player.username;
   button.dataset.avatarPath = player.avatar_path || "";
-
   const avatar = document.createElement("span");
-  avatar.className = "avatar small";
-  setAvatarContent(avatar, player.username, player.avatar_path || "");
-
-  const textWrap = document.createElement("span");
-  const name = document.createElement("strong");
-  const status = document.createElement("small");
+  avatar.className = "avatar";
+  setAvatar(avatar, player.username, player.avatar_path);
+  const info = document.createElement("span");
+  info.className = "friend-info";
+  const name = document.createElement("span");
+  name.className = "friend-name";
   name.textContent = player.username;
-  status.textContent = player.id === currentUserId ? translatedValue("You") : translatedValue("Qorum player");
-  textWrap.append(name, status);
-
-  button.append(avatar, textWrap);
+  const subtitle = document.createElement("span");
+  subtitle.className = "friend-status";
+  subtitle.textContent = translatedValue("QORUM player");
+  info.append(name, subtitle);
+  button.append(avatar, info);
   return button;
 }
 
 async function loadPlayers() {
-  if (!supabaseClient || !friendList) return;
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  const currentUser = sessionData.session?.user;
-
-  const { data, error } = await supabaseClient
+  const list = document.getElementById("friend-list");
+  const count = document.getElementById("online-count");
+  if (!list || !backendClient || !currentUser) return;
+  const ownerId = currentUser.id;
+  const { data, error } = await backendClient
     .from("profiles")
-    .select("id, username, avatar_path, created_at")
-    .order("created_at", { ascending: false })
-    .limit(24);
-
-  if (error || !data) return;
-
-  friendList.innerHTML = "";
-  const others = currentUser ? data.filter((player) => player.id !== currentUser.id) : data;
-  const list = others.length ? others : data;
-
-  if (!list.length) {
-    friendList.innerHTML = `<div class="empty-note">${translatedValue("No players yet. Create the first account.")}</div>`;
+    .select("id,username,avatar_path")
+    .neq("id", currentUser.id)
+    .order("username")
+    .limit(50);
+  if (error) {
+    console.error("Could not load QORUM players.", error);
+    showToast("Player list could not be loaded.");
     return;
   }
-
-  list.forEach((player, index) => {
-    const isCurrentUser = currentUser && player.id === currentUser.id;
-    const button = createPlayerButton(player, currentUser?.id, index === 0 && !isCurrentUser);
-    friendList.appendChild(button);
-  });
-
-  const firstPartner = list.find((player) => !currentUser || player.id !== currentUser.id);
-  if (currentUser && firstPartner) {
-    loadConversation(firstPartner.id, firstPartner.username, firstPartner.avatar_path || "");
-  } else if (!currentUser && chatPartnerStatus) {
-    chatPartnerStatus.textContent = translatedValue("Sign in to send direct messages.");
-  } else if (currentUser && !firstPartner && chatPartnerStatus) {
-    chatPartnerStatus.textContent = translatedValue("You are the first player here. Invite a friend to test chat.");
-  }
+  if (currentUser?.id !== ownerId) return;
+  list.replaceChildren(...data.map(createPlayerButton));
+  if (!data.length) list.innerHTML = `<span class="friend-status">${translatedValue("No other players yet.")}</span>`;
+  if (count) count.textContent = data.length;
 }
 
 async function searchPlayers(query) {
-  await initSupabase();
-  if (!supabaseClient || !playerSearchResults) return;
-
-  const clean = query.trim();
-  if (!clean) {
-    playerSearchResults.innerHTML = "";
+  const results = document.getElementById("player-results");
+  if (!results || !backendClient || !currentUser) {
+    showToast("Sign in to find and message players.");
+    openAuth("signin");
     return;
   }
-
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  const currentUserId = sessionData.session?.user?.id;
-  const { data, error } = await supabaseClient
+  if (query.length < 3) {
+    results.textContent = translatedValue("Enter at least 3 characters to search.");
+    return;
+  }
+  const { data, error } = await backendClient
     .from("profiles")
-    .select("id, username, avatar_path")
-    .ilike("username", `%${clean}%`)
-    .order("username", { ascending: true })
-    .limit(8);
-
+    .select("id,username,avatar_path")
+    .ilike("username", `%${query}%`)
+    .neq("id", currentUser.id)
+    .order("username")
+    .limit(20);
   if (error) {
-    playerSearchResults.innerHTML = `<div class="empty-note">${escapeHtml(error.message)}</div>`;
+    console.error("Could not search players.", error);
+    showToast("Player search failed.");
     return;
   }
-
+  results.replaceChildren();
   if (!data.length) {
-    playerSearchResults.innerHTML = `<div class="empty-note">${translatedValue("No player found for")} "${escapeHtml(clean)}".</div>`;
+    results.textContent = translatedValue("No players found. Check the username and try again.");
     return;
   }
-
-  playerSearchResults.innerHTML = "";
-  data.forEach((player) => {
-    const row = document.createElement("div");
-    row.className = "search-player";
-    const button = document.createElement("button");
-    button.className = "secondary-button small-button";
-    button.type = "button";
-    button.textContent = player.id === currentUserId ? translatedValue("You") : translatedValue("Message");
-    button.disabled = player.id === currentUserId;
-    button.addEventListener("click", () => {
-      if (friendList) {
-        loadConversation(player.id, player.username, player.avatar_path || "");
-      } else {
-        window.location.href = `community.html?user=${encodeURIComponent(player.username)}`;
-      }
-    });
-
-    const identity = document.createElement("div");
-    identity.className = "search-player-id";
-    const avatar = document.createElement("span");
-    avatar.className = "avatar small";
-    setAvatarContent(avatar, player.username, player.avatar_path || "");
-    const textWrap = document.createElement("div");
-    const name = document.createElement("strong");
-    const sub = document.createElement("span");
-    name.textContent = player.username;
-    sub.textContent = translatedValue("Qorum profile");
-    textWrap.append(name, sub);
-    identity.append(avatar, textWrap);
-
-    row.append(identity, button);
-    playerSearchResults.appendChild(row);
-  });
+  data.forEach(player => results.append(createPlayerButton(player)));
 }
 
 async function loadPersonalPlaytime() {
-  const localStats = (() => {
-    try { return JSON.parse(localStorage.getItem("qorum_local_playtime") || "{}"); } catch { return {}; }
-  })();
-
-  if (!supabaseClient) return;
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  const user = sessionData.session?.user;
-
-  const totals = new Map(games.map((game) => [game.id, localStats[game.id] || 0]));
-
-  if (user) {
-    const { data, error } = await supabaseClient
-      .from("game_sessions")
-      .select("game_id, duration_seconds")
-      .eq("user_id", user.id);
-
-    if (!error && data) {
-      data.forEach((row) => {
-        totals.set(row.game_id, Math.max(totals.get(row.game_id) || 0, Number(row.duration_seconds || 0)));
-      });
-    }
+  if (!backendClient || !currentUser) return;
+  const ownerId = currentUser.id;
+  const { data, error } = await backendClient
+    .from("game_sessions")
+    .select("game_id,started_at,last_heartbeat_at,ended_at,duration_seconds")
+    .eq("user_id", currentUser.id);
+  if (error) {
+    console.error("Could not load play-time totals.", error);
+    showToast("Your play-time totals could not be loaded.");
+    return;
   }
-
-  const totalSeconds = Array.from(totals.values()).reduce((sum, value) => sum + value, 0);
-  const topEntry = Array.from(totals.entries()).sort((a, b) => b[1] - a[1])[0];
-  const topGame = games.find((game) => game.id === topEntry?.[0]);
-  const summaryText = totalSeconds
-    ? `${formatDuration(totalSeconds)} ${translatedValue("total")} · ${translatedValue("top game:")} ${translatedValue(topGame?.title || "None")}`
-    : (user ? translatedValue("No tracked minutes yet. Launch a game to start your timer.") : translatedValue("Sign in to track your personal playtime across games."));
-
-  if (personalPlaytimeSummary) personalPlaytimeSummary.textContent = summaryText;
-  if (statsPersonalSummary) statsPersonalSummary.textContent = summaryText;
-
-  const listTargets = [personalPlaytimeList, statsPersonalList].filter(Boolean);
-  listTargets.forEach((target) => {
-    target.innerHTML = games
-      .map((game) => `
-        <div class="stat-line">
-          <span>${game.title}${game.multiplayer ? " · 🌐" : ""}</span>
-          <strong>${formatDuration(totals.get(game.id) || 0)}</strong>
-        </div>
-      `)
-      .join("");
-    localizeTree(target, true);
-  });
+  if (currentUser?.id !== ownerId) return;
+  for (const game of games) {
+    personalGameSeconds[game.id] = Number(localStorage.getItem(`qorum-playtime-${game.id}`)) || 0;
+  }
+  const dbTotals = {};
+  const now = Date.now();
+  for (const session of data) {
+    const seconds = session.ended_at
+      ? session.duration_seconds
+      : Math.max(0, Math.floor((Math.min(now, new Date(session.last_heartbeat_at).getTime() + 45_000) - new Date(session.started_at).getTime()) / 1000));
+    dbTotals[session.game_id] = (dbTotals[session.game_id] || 0) + seconds;
+  }
+  for (const [gid, sec] of Object.entries(dbTotals)) {
+    personalGameSeconds[gid] = Math.max(personalGameSeconds[gid] || 0, sec);
+  }
+  const totalSeconds = Object.values(personalGameSeconds).reduce((total, seconds) => total + seconds, 0);
+  const totalTime = document.getElementById("profile-session-count");
+  if (totalTime) totalTime.textContent = formatDuration(totalSeconds);
+  const timeList = document.getElementById("profile-game-times");
+  if (timeList) {
+    timeList.replaceChildren(...games.map(game => {
+      const row = document.createElement("div");
+      row.className = "profile-game-time";
+      const label = document.createElement("span");
+      label.textContent = game.title;
+      const duration = document.createElement("strong");
+      duration.textContent = formatDuration(personalGameSeconds[game.id]);
+      row.append(label, duration);
+      return row;
+    }));
+    localizeTree(timeList, true);
+  }
+  renderGames();
 }
 
 async function loadPublicPlaytime() {
-  await initSupabase();
-  if (!supabaseClient) return;
-
-  const { data, error } = await supabaseClient.rpc("get_game_playtime_summary");
-  if (error || !data) return;
-
-  const byGame = new Map(data.map((row) => [row.game_id, row]));
-  if (publicPlaytimeList) {
-    publicPlaytimeList.innerHTML = games
-      .map((game) => {
-        const stats = byGame.get(game.id) || { total_seconds: 0, sessions_count: 0, players_count: 0 };
-        return `
-          <article class="stat-card">
-            <span class="tag">${Number(stats.players_count || 0)} ${translatedValue("players")}</span>
-            <h3>${game.title}</h3>
-            <p>${formatDuration(Number(stats.total_seconds || 0))} ${translatedValue("played across")} ${Number(stats.sessions_count || 0)} ${translatedValue("sessions.")}</p>
-          </article>
-        `;
-      })
-      .join("");
-    localizeTree(publicPlaytimeList, true);
+  const table = document.getElementById("public-stats");
+  if (!table) return;
+  if (!backendClient) {
+    table.innerHTML = `<tr><td colspan="3">${translatedValue("Statistics are unavailable until the account service is configured.")}</td></tr>`;
+    return;
   }
+  const { data, error } = await backendClient.rpc("get_public_game_stats");
+  if (error) {
+    console.error("Could not load public game statistics.", error);
+    table.innerHTML = `<tr><td colspan="3">${translatedValue("Statistics could not be loaded. Please try again later.")}</td></tr>`;
+    return;
+  }
+  table.replaceChildren();
+  const totals = new Map((data || []).map(row => [row.game_id, row]));
+  for (const game of games) {
+    const row = totals.get(game.id);
+    const localSec = Number(localStorage.getItem(`qorum-playtime-${game.id}`)) || 0;
+    const totalSec = Math.max(row ? Number(row.total_seconds) : 0, localSec);
+    const tr = document.createElement("tr");
+    const title = document.createElement("td");
+    title.textContent = game.title;
+    const time = document.createElement("td");
+    time.textContent = formatDuration(totalSec);
+    const players = document.createElement("td");
+    players.textContent = row ? row.player_count : (localSec > 0 ? "1" : "0");
+    tr.append(title, time, players);
+    table.append(tr);
+  }
+  localizeTree(table, true);
 }
 
 function launchGame(gameId, joinRoomCode = null) {
-  const game = games.find((item) => item.id === gameId);
-  if (!game || !gameModal) return;
-
-  stopActiveGame();
-  activeGameId = game.id;
-  gameTitle.textContent = translatedValue(game.title);
-  gameControls.textContent = `${translatedValue("Controls:")} ${translatedValue(game.controls)}`;
-  gameModal.classList.add("open");
-  gameModal.setAttribute("aria-hidden", "false");
-  syncModalBodyLock();
-
-  if (joinRoomCode) {
-    activePresetRoomCode = String(joinRoomCode).toUpperCase();
+  const game = games.find(item => item.id === gameId);
+  if (!game) return;
+  if (!gameModal || !gameStage) {
+    const url = `index.html?game=${encodeURIComponent(gameId)}${joinRoomCode ? `&room=${encodeURIComponent(joinRoomCode)}` : ""}`;
+    window.location.href = url;
+    return;
   }
-
-  startGameTracking(game.id);
-
-  if (game.kind === "snake") activeGameCleanup = startSnake();
-  if (game.kind === "sky") activeGameCleanup = startSkyHop();
-  if (game.kind === "pong") activeGameCleanup = startPong();
-  if (game.kind === "memory") activeGameCleanup = startMemoryGarden();
-  if (game.kind === "ttt") activeGameCleanup = startTicTacToe();
-  if (game.kind === "hockey") activeGameCleanup = startNeonDuel();
-  if (game.kind === "c4") activeGameCleanup = startConnectFour();
-  if (game.kind === "tanks") activeGameCleanup = startTankBrawl();
-
+  if (activeGameCleanup) activeGameCleanup();
+  activeGameId = gameId;
+  if (joinRoomCode) pendingRoomJoinCode = joinRoomCode;
+  startGameTracking(gameId);
+  document.getElementById("game-title").textContent = game.title;
+  document.getElementById("game-description").textContent = game.instructions;
+  gameModal.classList.add("open");
+  if (game.kind === "snake") activeGameCleanup = startSnake(game);
+  if (game.kind === "sky") activeGameCleanup = startSkyHop(game);
+  if (game.kind === "pong") activeGameCleanup = startPong(game);
+  if (game.kind === "memory") activeGameCleanup = startMemoryGarden(game);
+  if (game.kind === "ttt") activeGameCleanup = startTicTacToe(game);
+  if (game.kind === "hockey") activeGameCleanup = startNeonDuel(game);
+  if (game.kind === "c4") activeGameCleanup = startConnectFour(game);
+  if (game.kind === "tanks") activeGameCleanup = startTankBrawl(game);
   localizeTree(gameModal, true);
 }
 
 function closeGame() {
-  stopActiveGame();
+  if (activeGameCleanup) activeGameCleanup();
+  activeGameCleanup = null;
   finishGameTracking();
   activeGameId = null;
-  if (!gameModal) return;
-  gameModal.classList.remove("open");
-  gameModal.setAttribute("aria-hidden", "true");
-  gameStage.innerHTML = "";
-  syncModalBodyLock();
+  if (gameModal) gameModal.classList.remove("open");
+  if (gameStage) gameStage.replaceChildren();
 }
 
-document.addEventListener("click", (event) => {
-  const playButton = event.target.closest("[data-play]");
-  if (playButton) {
-    launchGame(playButton.dataset.play);
+document.addEventListener("click", event => {
+  const playBtn = event.target.closest("[data-play]");
+  if (playBtn) {
+    launchGame(playBtn.dataset.play);
     return;
   }
-
-  const joinRoomBtn = event.target.closest("[data-join-room]");
-  if (joinRoomBtn) {
-    const gId = joinRoomBtn.dataset.gameId;
-    const rCode = joinRoomBtn.dataset.joinRoom;
-    if (document.getElementById("game-modal")) {
-      launchGame(gId, rCode);
-    } else {
-      window.location.href = `index.html?game=${encodeURIComponent(gId)}&room=${encodeURIComponent(rCode)}`;
-    }
-    return;
-  }
-
-  const friend = event.target.closest(".friend[data-user-id]");
-  if (friend) {
-    document.querySelectorAll(".friend").forEach((item) => item.classList.remove("active"));
-    friend.classList.add("active");
-    loadConversation(friend.dataset.userId, friend.dataset.username, friend.dataset.avatarPath || "");
+  const joinBtn = event.target.closest("[data-join-room]");
+  if (joinBtn) {
+    const rCode = joinBtn.dataset.joinRoom;
+    const gId = joinBtn.dataset.joinGame || PREFIX_GAME_MAP[rCode.charAt(0)] || "tic-tac-toe";
+    launchGame(gId, rCode);
   }
 });
 
 const quickJoinForm = document.getElementById("quick-join-form");
 if (quickJoinForm) {
-  quickJoinForm.addEventListener("submit", (ev) => {
+  quickJoinForm.addEventListener("submit", ev => {
     ev.preventDefault();
-    const gameSelect = document.getElementById("quick-join-game");
-    const codeInput = document.getElementById("quick-join-code");
-    const gId = gameSelect?.value || "tic-tac-toe";
-    const code = (codeInput?.value || "").trim().toUpperCase();
-    if (!code) {
-      showToast("Enter a room code (for example, QRM42)");
+    const input = document.getElementById("quick-room-code");
+    const code = (input?.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (code.length < 3) {
+      showToast("Enter a room code (for example, T8K2M)");
       return;
     }
+    const openInfo = openLobbyRooms.get(code);
+    const gId = (openInfo && openInfo.gameId) || PREFIX_GAME_MAP[code.charAt(0)] || "tic-tac-toe";
     launchGame(gId, code);
   });
 }
 
+const chatForm = document.getElementById("chat-form");
 if (chatForm) {
-  chatForm.addEventListener("submit", async (event) => {
+  chatForm.addEventListener("submit", async event => {
     event.preventDefault();
-    const text = chatInput.value.trim();
-    if (!text || !supabaseClient || !activeChatUserId) return;
-
-    const { data: sessionData } = await supabaseClient.auth.getSession();
-    const user = sessionData.session?.user;
-    if (!user) {
-      openAuth("signin");
+    const input = document.getElementById("chat-input");
+    const text = input.value.trim();
+    if (!backendClient || !currentUser || !activeChatUserId || !text) {
+      if (!currentUser) showToast("Sign in and select a player before sending a message.");
       return;
     }
-
-    chatInput.value = "";
-    const { data, error } = await supabaseClient
+    const submit = chatForm.querySelector("button[type='submit']");
+    if (submit) submit.disabled = true;
+    const { data, error } = await backendClient
       .from("direct_messages")
-      .insert({
-        sender_id: user.id,
-        recipient_id: activeChatUserId,
-        body: text,
-      })
-      .select("id, sender_id, recipient_id, body, created_at")
+      .insert({ sender_id: currentUser.id, recipient_id: activeChatUserId, content: text })
+      .select("id,sender_id,recipient_id,content,created_at")
       .single();
-
-    if (error && chatPartnerStatus) {
-      chatPartnerStatus.textContent = error.message;
-    } else if (data) {
-      renderChatMessage(data, user.id);
-    }
-  });
-}
-
-if (publicChatForm) {
-  publicChatForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const text = publicChatInput?.value.trim();
-    if (!text) return;
-
-    await initSupabase();
-    if (!supabaseClient) return;
-
-    const { data: sessionData } = await supabaseClient.auth.getSession();
-    const user = sessionData.session?.user;
-    if (!user) {
-      openAuth("signin");
+    if (submit) submit.disabled = false;
+    if (error) {
+      console.error("Could not send the message.", error);
+      showToast("Message could not be sent.");
       return;
     }
-
-    publicChatInput.value = "";
-    const { error } = await supabaseClient.from("public_messages").insert({
-      sender_id: user.id,
-      body: text,
-    });
-
-    if (error && publicChatStatus) {
-      publicChatStatus.textContent = error.message;
-    }
+    renderChatMessage(data);
+    input.value = "";
   });
 }
 
-if (playerSearchForm) {
-  playerSearchForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    searchPlayers(playerSearchInput?.value || "");
-  });
-}
-
-const searchParams = new URLSearchParams(window.location.search);
-const requestedUser = searchParams.get("user");
-if (requestedUser && playerSearchInput) {
-  playerSearchInput.value = requestedUser;
-  searchPlayers(requestedUser);
-}
-
-const requestedGame = searchParams.get("game");
-const requestedRoom = searchParams.get("room");
-if (requestedGame && document.getElementById("game-modal")) {
-  setTimeout(() => {
-    launchGame(requestedGame, requestedRoom || null);
-  }, 250);
-}
-
-if (profileAction) {
-  profileAction.addEventListener("click", () => signOutOrOpenLogin());
-}
-
-if (avatarUploadInput) {
-  avatarUploadInput.addEventListener("change", (event) => {
-    const file = event.target.files?.[0];
-    if (file) uploadProfileAvatar(file);
-    event.target.value = "";
-  });
-}
-
-if (profileSignin) {
-  profileSignin.addEventListener("click", () => openAuth("signin"));
-}
-
-if (modalSwitch) {
-  modalSwitch.addEventListener("click", () => {
-    openAuth(authMode === "signup" ? "signin" : "signup");
-  });
-}
-
-if (closeModal) {
-  closeModal.addEventListener("click", () => {
-    closeAuthModal();
-  });
-}
-
-if (authModal) {
-  authModal.addEventListener("click", (event) => {
-    if (event.target === authModal) {
-      closeAuthModal();
-    }
-  });
-}
-
-if (gameClose) {
-  gameClose.addEventListener("click", closeGame);
-}
-
-if (gameRestart) {
-  gameRestart.addEventListener("click", () => {
-    if (activeGameId) launchGame(activeGameId);
-  });
-}
-
-if (gameModal) {
-  gameModal.addEventListener("click", (event) => {
-    if (event.target === gameModal) closeGame();
-  });
-}
-
-window.addEventListener("beforeunload", () => {
-  finishGameTracking();
+document.addEventListener("click", event => {
+  const player = event.target.closest(".friend[data-user-id], .player-results .friend[data-user-id]");
+  if (!player) return;
+  const userId = player.dataset.userId;
+  const username = player.dataset.username;
+  if (document.getElementById("chat-title")) {
+    loadConversation(userId, username, player.dataset.avatarPath || null);
+  } else {
+    window.location.href = `community.html?user=${encodeURIComponent(userId)}`;
+  }
 });
 
-if (authForm) {
-  authForm.addEventListener("submit", async (event) => {
+const playerSearchForm = document.getElementById("player-search-form");
+if (playerSearchForm) {
+  playerSearchForm.addEventListener("submit", event => {
     event.preventDefault();
-    await initSupabase();
-
-    if (!supabaseClient) {
-      authFeedback.textContent = translatedValue("Add your Supabase Anon Key in config.js first.");
-      return;
-    }
-
-    const username = normalizeUsername(usernameInput.value);
-    const password = passwordInput.value;
-
-    if (!isValidUsername(username)) {
-      authFeedback.textContent = translatedValue("Username must be 3-24 characters using letters, numbers, or underscores.");
-      return;
-    }
-
-    authFeedback.textContent = authMode === "signup"
-      ? translatedValue("Creating account...")
-      : translatedValue("Signing in...");
-
-    if (authMode === "signup") {
-      const generatedRecoveryCode = generateRecoveryCode();
-      const recoveryCodeHash = await sha256Hex(normalizeRecoveryCode(generatedRecoveryCode));
-      const internalEmail = await usernameToInternalEmail(username);
-      const { data, error } = await supabaseClient.auth.signUp({
-        email: internalEmail,
-        password,
-        options: {
-          data: {
-            username,
-            recovery_code_hash: recoveryCodeHash,
-          },
-        },
-      });
-
-      if (error) {
-        authFeedback.textContent = error.message;
-        return;
-      }
-
-      if (data.user) {
-        await supabaseClient.from("profiles").upsert({
-          id: data.user.id,
-          username,
-        });
-      }
-
-      await updateProfileUI();
-      savePendingRecoveryCode(username, generatedRecoveryCode);
-      setAuthView("recovery-code");
-      return;
-    }
-
-    const { data: signInLookup, error: lookupError } = await supabaseClient.rpc("get_Auth_email_for_username", {
-      p_username: username,
-    });
-    const resolvedEmail = !lookupError && signInLookup ? signInLookup : await usernameToInternalEmail(username);
-
-    const { error } = await supabaseClient.auth.signInWithPassword({
-      email: resolvedEmail,
-      password,
-    });
-
-    if (error) {
-      authFeedback.textContent = translatedValue("Invalid username or password.");
-      return;
-    }
-
-    authFeedback.textContent = translatedValue("Signed in.");
-    await updateProfileUI();
-    setTimeout(() => closeAuthModal(true), 450);
+    searchPlayers(document.getElementById("player-search").value.trim());
   });
 }
 
-async function signOutOrOpenLogin() {
-  await initSupabase();
-
-  if (!supabaseClient) {
-    openAuth("signup");
-    return;
-  }
-
-  const { data } = await supabaseClient.auth.getSession();
-  if (data.session) {
-    await finishGameTracking();
-    await supabaseClient.auth.signOut();
-    await updateProfileUI();
-    return;
-  }
-
-  openAuth("signup");
+const urlParams = new URLSearchParams(window.location.search);
+const requestedUser = urlParams.get("user");
+if (requestedUser && /^[0-9a-f-]{36}$/i.test(requestedUser)) {
+  window.addEventListener("qorum-auth-ready", async () => {
+    if (!currentUser) return;
+    const { data, error } = await backendClient
+      .from("profiles")
+      .select("id,username,avatar_path")
+      .eq("id", requestedUser)
+      .maybeSingle();
+    if (error) {
+      console.error("Could not open the selected player's profile.", error);
+      showToast("That player could not be found.");
+      return;
+    }
+    if (data) loadConversation(data.id, data.username, data.avatar_path);
+  }, { once: true });
 }
 
-async function uploadProfileAvatar(file) {
-  if (!file) return;
-  await initSupabase();
+const requestedGame = urlParams.get("game");
+const requestedRoom = urlParams.get("room");
+if (requestedGame || requestedRoom) {
+  window.setTimeout(() => {
+    const code = requestedRoom ? requestedRoom.trim().toUpperCase() : null;
+    const gId = requestedGame || (code && PREFIX_GAME_MAP[code.charAt(0)]) || "tic-tac-toe";
+    launchGame(gId, code);
+  }, 180);
+}
 
-  if (!supabaseClient) {
-    if (avatarUploadStatus) avatarUploadStatus.textContent = translatedValue("Connect Supabase first.");
+if (searchInput) {
+  const initialSearch = urlParams.get("search");
+  if (initialSearch && featuredGames) searchInput.value = initialSearch;
+  searchInput.addEventListener("input", renderGames);
+  if (!featuredGames && !libraryGames) {
+    searchInput.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const query = searchInput.value.trim();
+      window.location.href = query ? `index.html?search=${encodeURIComponent(query)}` : "index.html";
+    });
+  }
+}
+
+const profileAction = document.getElementById("profile-action");
+if (profileAction) profileAction.addEventListener("click", signOutOrOpenLogin);
+const avatarUpload = document.getElementById("avatar-upload");
+if (avatarUpload) avatarUpload.addEventListener("change", () => {
+  if (avatarUpload.files?.[0]) void uploadProfileAvatar(avatarUpload.files[0]);
+});
+const profileSignin = document.getElementById("profile-signin");
+if (profileSignin) profileSignin.addEventListener("click", signOutOrOpenLogin);
+const modalSwitch = document.getElementById("modal-switch");
+if (modalSwitch) modalSwitch.addEventListener("click", () => openAuth(authMode === "signin" ? "signup" : "signin"));
+const closeModal = document.getElementById("close-modal");
+if (closeModal) closeModal.addEventListener("click", closeAuthModal);
+const gameClose = document.getElementById("game-close");
+if (gameClose) gameClose.addEventListener("click", closeGame);
+const gameRestart = document.getElementById("game-restart");
+if (gameRestart) gameRestart.addEventListener("click", () => {
+  if (activeGameId) launchGame(activeGameId);
+});
+if (gameModal) gameModal.addEventListener("click", event => {
+  if (event.target === gameModal) closeGame();
+});
+if (authModal) authModal.addEventListener("click", event => {
+  if (event.target === authModal) closeAuthModal();
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    if (authModal && authModal.classList.contains("open")) closeAuthModal();
+    closeGame();
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) sidebar.classList.remove("open");
+  }
+});
+
+const authForm = document.getElementById("auth-form");
+if (authForm) authForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (authView !== "credentials") return;
+  if (!backendClient) {
+    document.getElementById("form-error").textContent = translatedValue("The account service is unavailable. Check your connection and try again.");
     return;
   }
-
-  if (!file.type.startsWith("image/")) {
-    if (avatarUploadStatus) avatarUploadStatus.textContent = translatedValue("Choose a PNG, JPG, GIF, or WEBP image.");
+  const username = document.getElementById("auth-username").value.trim();
+  const password = document.getElementById("auth-password").value;
+  if (!/^[A-Za-z0-9_]{3,24}$/.test(username) || password.length < 8 || password.length > 72) {
+    document.getElementById("form-error").textContent = translatedValue("Enter a valid username and a password between 8 and 72 characters.");
     return;
   }
-
-  if (file.size > 2 * 1024 * 1024) {
-    if (avatarUploadStatus) avatarUploadStatus.textContent = translatedValue("Avatar must be under 2 MB.");
+  let result;
+  if (authMode === "signup") {
+    const { data, error } = await backendClient.functions.invoke("register-account", {
+      body: { username, password },
+    });
+    if (error || !data?.success || typeof data.recoveryCode !== "string"
+      || !/^[A-Za-z0-9_-]{43}$/.test(data.recoveryCode)) {
+      if (error) console.error("Account registration failed.", error);
+      document.getElementById("form-error").textContent = error
+        ? await functionErrorMessage(error, "The account could not be created. Please try again.")
+        : data?.error || "The account could not be safely initialized. Please try again.";
+      return;
+    }
+    pendingRecovery = { username, code: data.recoveryCode };
+    result = await backendClient.auth.signInWithPassword({
+      email: usernameAuthEmail(username),
+      password,
+    });
+    if (result.error) {
+      console.error("The account was created, but automatic sign-in failed.", result.error);
+      pendingRecovery.loginAfterSignup = true;
+      document.getElementById("auth-password").value = "";
+      document.getElementById("recovery-card-username").textContent = username;
+      document.getElementById("recovery-card-code").textContent = pendingRecovery.code;
+      document.getElementById("recovery-card-status").textContent =
+        "The code is saved securely. Automatic sign-in failed; save this code, then sign in with your username and password.";
+      authView = "code";
+      setAuthView("code");
+      return;
+    }
+  } else {
+    result = await backendClient.auth.signInWithPassword({
+      email: usernameAuthEmail(username),
+      password,
+    });
+    if (result.error) {
+      result = await backendClient.auth.signInWithPassword({
+        email: `${username.toLowerCase()}@accounts.qorum.invalid`,
+        password,
+      });
+    }
+  }
+  if (result.error) {
+    console.error("Authentication failed.", result.error);
+    const duplicateUsername = result.error.code === "23505" || result.error.message.includes("profiles_username_lower_idx");
+    document.getElementById("form-error").textContent = duplicateUsername
+      ? translatedValue("That username is already taken. Please choose another.")
+      : authMode === "signup"
+        ? result.error.message
+        : translatedValue("Username or password is incorrect.");
     return;
   }
+  if (authMode === "signup") {
+    document.getElementById("auth-password").value = "";
+    await updateProfileUI(result.data.user);
+    authView = "saving";
+    setAuthView("saving");
+    await savePendingRecoveryCode();
+    return;
+  }
+  authModal.classList.remove("open");
+  await updateProfileUI(result.data.user);
+  showToast("You are signed in.");
+});
 
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  const user = sessionData.session?.user;
-  if (!user) {
+const loginButton = document.getElementById("login-button");
+if (loginButton) loginButton.addEventListener("click", () => {
+  if (currentUser) window.location.href = "profile.html";
+  else openAuth("signin");
+});
+const notificationsButton = document.getElementById("notifications-button");
+if (notificationsButton) notificationsButton.addEventListener("click", () => showToast("You're all caught up."));
+const menuButton = document.getElementById("menu-button");
+if (menuButton) menuButton.addEventListener("click", () => {
+  const sidebar = document.getElementById("sidebar");
+  if (sidebar) sidebar.classList.toggle("open");
+});
+
+async function signOutOrOpenLogin() {
+  if (!currentUser) {
     openAuth("signin");
     return;
   }
+  await finishGameTracking();
+  const { error } = await backendClient.auth.signOut();
+  if (error) {
+    console.error("Could not sign out.", error);
+    showToast("Sign out failed. Please try again.");
+    return;
+  }
+  showToast("You have signed out.");
+}
 
-  if (avatarUploadStatus) avatarUploadStatus.textContent = translatedValue("Uploading avatar...");
+async function uploadProfileAvatar(file) {
+  const input = document.getElementById("avatar-upload");
+  const status = document.getElementById("avatar-upload-status");
+  const mimeExtensions = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  if (!currentUser || !backendClient) {
+    showToast("Sign in to upload a profile picture.");
+    return;
+  }
+  if (!file || !mimeExtensions[file.type] || file.size > 3 * 1024 * 1024 || file.size === 0) {
+    if (status) status.textContent = translatedValue("Choose a JPG, PNG, or WebP image up to 3 MB.");
+    return;
+  }
 
-  const extension = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
-  const filePath = `${user.id}/avatar-${Date.now()}.${extension}`;
+  const ownerId = currentUser.id;
+  const oldAvatarPath = currentAvatarPath;
+  const extension = mimeExtensions[file.type];
+  const newAvatarPath = `${ownerId}/${Date.now()}.${extension}`;
+  if (input) input.disabled = true;
+  if (status) status.textContent = translatedValue("Uploading your profile picture…");
 
-  const { error: uploadError } = await supabaseClient.storage
+  const { error: uploadError } = await backendClient.storage
     .from("avatars")
-    .upload(filePath, file, {
+    .upload(newAvatarPath, file, {
       cacheControl: "3600",
-      upsert: true,
       contentType: file.type,
+      upsert: false,
     });
-
   if (uploadError) {
-    if (avatarUploadStatus) avatarUploadStatus.textContent = uploadError.message;
+    console.error("Could not upload the profile picture.", uploadError);
+    if (status) status.textContent = translatedValue("The picture could not be uploaded. Please try again.");
+    if (input) input.disabled = false;
     return;
   }
 
-  const { error: profileError } = await supabaseClient
+  const { error: profileError } = await backendClient
     .from("profiles")
-    .update({ avatar_path: filePath })
-    .eq("id", user.id);
-
+    .update({ avatar_path: newAvatarPath })
+    .eq("id", ownerId);
   if (profileError) {
-    if (avatarUploadStatus) avatarUploadStatus.textContent = profileError.message;
+    console.error("Could not save the profile picture to your profile.", profileError);
+    const { error: cleanupError } = await backendClient.storage.from("avatars").remove([newAvatarPath]);
+    if (cleanupError) console.error("Could not remove the unlinked profile picture.", cleanupError);
+    if (status) status.textContent = translatedValue("The picture uploaded, but your profile could not be updated.");
+    if (input) input.disabled = false;
+    return;
+  }
+  if (currentUser?.id !== ownerId) {
+    if (input) input.disabled = false;
     return;
   }
 
-  if (avatarUploadStatus) avatarUploadStatus.textContent = translatedValue("Avatar updated.");
-  await updateProfileUI();
-}
-
-async function updateProfileUI() {
-  await initSupabase();
-
-  if (!supabaseClient) {
-    if (profileStatus) {
-      profileStatus.textContent = translatedValue("Ready for Supabase connection: add your project anon key in config.js.");
-    }
-    return;
-  }
-
-  const { data } = await supabaseClient.auth.getSession();
-  const user = data.session?.user;
-
-  if (!user) {
-    currentUserDisplayName = "";
-    if (profileName) profileName.textContent = translatedValue("Guest Player");
-    if (profileHandle) profileHandle.textContent = "@guest · not signed in";
-    if (profileStatus) profileStatus.textContent = translatedValue("Create an account to save your profile, chat with players, and track playtime.");
-    setAvatarContent(profileAvatar, "Q", "");
-    if (avatarUploadLabel) avatarUploadLabel.hidden = true;
-    if (avatarUploadStatus) avatarUploadStatus.textContent = "";
-    if (loginButton) loginButton.textContent = "👤";
-    if (profileAction) profileAction.textContent = translatedValue("Create Account");
-    if (profileSignin) profileSignin.hidden = false;
-    loadPlayers();
-    loadPersonalPlaytime();
-    loadPublicPlaytime();
-    initializePublicChat();
-    return;
-  }
-
-  const { data: profile } = await supabaseClient
-    .from("profiles")
-    .select("username, status, avatar_path")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const username = profile?.username || user.user_metadata?.username || user.email?.split("@")[0] || "player";
-  const avatarPath = profile?.avatar_path || "";
-  currentUserDisplayName = username;
-  if (profileName) profileName.textContent = username;
-  if (profileHandle) profileHandle.textContent = `@${username}`;
-  if (profileStatus) profileStatus.textContent = profile?.status || translatedValue("Signed in with Supabase. Your Qorum profile is active.");
-  setAvatarContent(profileAvatar, username, avatarPath);
-  if (avatarUploadLabel) avatarUploadLabel.hidden = false;
-  if (loginButton) loginButton.textContent = username.slice(0, 2).toUpperCase();
-  if (profileAction) profileAction.textContent = translatedValue("Sign Out");
-  if (profileSignin) profileSignin.hidden = true;
-
-  if (onlineLobbyChannel) {
-    onlineLobbyChannel.track({
-      name: currentUserDisplayName,
-      online_at: new Date().toISOString(),
-    });
-  }
-
-  loadPlayers();
-  loadPersonalPlaytime();
-  loadPublicPlaytime();
-  initializePublicChat();
-}
-
-if (loginButton) {
-  loginButton.addEventListener("click", signOutOrOpenLogin);
-}
-
-if (notificationsButton) {
-  notificationsButton.addEventListener("click", () => {
-    if (friendList) {
-      friendList.scrollIntoView({ behavior: "smooth", block: "center" });
-    } else {
-      window.location.href = "community.html";
-    }
+  currentAvatarPath = newAvatarPath;
+  document.querySelectorAll(".profile-card .avatar").forEach(element => {
+    setAvatar(element, currentUsername, currentAvatarPath);
   });
-}
+  setAvatar(document.getElementById("profile-view-avatar"), currentUsername, currentAvatarPath);
 
-if (menuButton) {
-  menuButton.addEventListener("click", () => {
-    const target = document.getElementById("library") || document.getElementById("profile") || document.getElementById("community");
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth" });
-    } else {
-      window.location.href = "library.html";
+  if (oldAvatarPath && oldAvatarPath !== newAvatarPath) {
+    const { error: cleanupError } = await backendClient.storage.from("avatars").remove([oldAvatarPath]);
+    if (cleanupError) {
+      console.error("Could not remove the previous profile picture.", cleanupError);
+      if (status) status.textContent = translatedValue("Picture updated. The previous image could not be removed.");
+      showToast("Your picture updated, but the previous image could not be removed.");
     }
-  });
+  }
+  if (status && !status.textContent.startsWith("Picture updated.")) {
+    status.textContent = translatedValue("Profile picture updated.");
+  }
+  if (input) {
+    input.value = "";
+    input.disabled = false;
+  }
 }
 
-const searchQueryFromHome = searchParams.get("search");
-if (searchQueryFromHome && searchInput) {
-  searchInput.value = searchQueryFromHome;
+async function updateProfileUI(user) {
+  if (!backendClient) {
+    currentUser = null;
+    currentUsername = "Guest player";
+    currentAvatarPath = null;
+    const status = document.getElementById("profile-view-status");
+    if (status) status.textContent = translatedValue("Account service unavailable.");
+  } else {
+    if (user === undefined) {
+      const { data, error } = await backendClient.auth.getSession();
+      if (error) {
+        console.error("Could not restore the signed-in session.", error);
+        showToast("Your sign-in status could not be restored.");
+        return;
+      }
+      user = data.session?.user ?? null;
+    }
+    currentUser = user;
+    currentUsername = "Guest player";
+    currentAvatarPath = null;
+    if (currentUser) {
+      const { data, error } = await backendClient
+        .from("profiles")
+        .select("username,avatar_path")
+        .eq("id", currentUser.id)
+        .maybeSingle();
+      if (error) {
+        console.error("Could not load your QORUM profile.", error);
+        showToast("Your profile details could not be loaded.");
+      } else if (data) {
+        currentUsername = data.username;
+        currentAvatarPath = data.avatar_path;
+      }
+    }
+  }
+  const profileName = document.getElementById("profile-name");
+  const profileLevel = document.getElementById("profile-level");
+  const login = document.getElementById("login-button");
+  if (profileName) profileName.textContent = currentUsername;
+  if (profileLevel) profileLevel.textContent = currentUser ? "Signed in" : "Not signed in";
+  if (login) login.textContent = currentUser ? "My account" : "Sign in";
+  const nameHeading = document.getElementById("profile-view-name");
+  const signinMethod = document.getElementById("profile-view-signin-method");
+  const avatar = document.getElementById("profile-view-avatar");
+  const accountStatus = document.getElementById("profile-view-status");
+  if (nameHeading) nameHeading.textContent = currentUsername;
+  if (signinMethod) signinMethod.textContent = currentUser
+    ? "Username sign-in · Save your recovery code privately"
+    : "Sign in to save your profile.";
+  setAvatar(avatar, currentUser ? currentUsername : "Guest", currentUser ? currentAvatarPath : null);
+  document.querySelectorAll(".profile-card .avatar").forEach(element => {
+    setAvatar(element, currentUser ? currentUsername : "Guest", currentUser ? currentAvatarPath : null);
+  });
+  const avatarControls = document.getElementById("avatar-upload-controls");
+  if (avatarControls) avatarControls.hidden = !currentUser;
+  const publicChatInput = document.getElementById("public-chat-input");
+  const publicChatSubmit = document.querySelector("#public-chat-form button[type='submit']");
+  if (publicChatInput) publicChatInput.disabled = !currentUser;
+  if (publicChatSubmit) publicChatSubmit.disabled = !currentUser;
+  if (accountStatus) accountStatus.textContent = currentUser ? "QORUM account · Signed in" : "Guest profile · Sign in to continue";
+  const profileSignin = document.getElementById("profile-signin");
+  if (profileSignin) profileSignin.textContent = currentUser ? "Sign out" : "Sign in or create account";
+  const gameCount = document.getElementById("profile-game-count");
+  const bestScore = document.getElementById("profile-best-score");
+  if (gameCount) gameCount.textContent = library.length;
+  if (bestScore) {
+    const scores = games.map(game => Number(localStorage.getItem(`playroom-score-${game.id}`)) || 0);
+    bestScore.textContent = Math.max(0, ...scores);
+  }
+  if (currentUser) {
+    await Promise.all([loadPlayers(), loadPersonalPlaytime()]);
+  } else {
+    if (activeChatChannel) {
+      await backendClient.removeChannel(activeChatChannel);
+      activeChatChannel = null;
+    }
+    activeChatUserId = null;
+    const list = document.getElementById("friend-list");
+    const count = document.getElementById("online-count");
+    if (list) list.innerHTML = `<span class="friend-status">${translatedValue("Sign in to find players.")}</span>`;
+    if (count) count.textContent = "0";
+    const chatTitle = document.getElementById("chat-title");
+    const chatStatus = document.getElementById("chat-status");
+    const chatAvatar = document.getElementById("chat-avatar");
+    const chatMessages = document.getElementById("chat-messages");
+    const chatInput = document.getElementById("chat-input");
+    const chatSubmit = document.querySelector("#chat-form button[type='submit']");
+    if (chatTitle) chatTitle.textContent = "Choose a player";
+    if (chatStatus) chatStatus.textContent = "Sign in to start a conversation.";
+    if (chatAvatar) chatAvatar.textContent = "?";
+    if (chatMessages) chatMessages.innerHTML = `<div class="empty-state">${translatedValue("Search for a username or select a player from the sidebar.")}</div>`;
+    if (chatInput) chatInput.disabled = true;
+    if (chatSubmit) chatSubmit.disabled = true;
+    const playerResults = document.getElementById("player-results");
+    if (playerResults) playerResults.replaceChildren();
+    const totalSeconds = Object.values(personalGameSeconds).reduce((a, b) => a + b, 0);
+    const totalTime = document.getElementById("profile-session-count");
+    if (totalTime) totalTime.textContent = formatDuration(totalSeconds);
+    const timeList = document.getElementById("profile-game-times");
+    if (timeList) {
+      timeList.replaceChildren(...games.map(game => {
+        const row = document.createElement("div");
+        row.className = "profile-game-time";
+        const localSec = personalGameSeconds[game.id] || 0;
+        if (localSec > 0) {
+          const label = document.createElement("span");
+          label.textContent = game.title;
+          const duration = document.createElement("strong");
+          duration.textContent = formatDuration(localSec);
+          row.append(label, duration);
+        } else {
+          row.textContent = `${translatedValue(game.title)} · ${translatedValue("Sign in to record play time")}`;
+        }
+        return row;
+      }));
+      localizeTree(timeList, true);
+    }
+  }
+  window.dispatchEvent(new Event("qorum-auth-ready"));
+}
+
+if (backendClient) {
+  backendClient.auth.onAuthStateChange((_event, session) => {
+    window.setTimeout(() => updateProfileUI(session?.user ?? null), 0);
+  });
+} else {
+  console.error("Supabase configuration is missing or the client library did not load.");
+  showToast("Account service is not configured.");
 }
 
 initGlobalLobby();
