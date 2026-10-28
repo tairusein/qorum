@@ -36,14 +36,14 @@
       <header class="topbar">
         <button type="button" class="icon-button mobile-menu" aria-label="Open menu" id="menu-button">☰</button>
         <nav class="top-links" aria-label="Site sections"><a class="top-link" href="index.html">Arcade</a><a class="top-link" href="library.html">My games</a><a class="top-link" href="community.html">Community</a><a class="top-link active" href="profile.html" aria-current="page">Profile</a><a class="top-link" href="stats.html">Statistics</a></nav>
-        <div class="top-actions"><label class="search-box" aria-label="Search games"><span aria-hidden="true">⌕</span><input id="game-search" type="search" placeholder="Search games..." autocomplete="off"></label><button type="button" class="icon-button" id="notifications-button" aria-label="Notifications">♧</button><button type="button" class="login-button" id="login-button">Sign in</button></div>
+        <div class="top-actions"><label class="search-box" aria-label="Search games"><span aria-hidden="true">⌕</span><input id="game-search" type="search" placeholder="Search games..." autocomplete="off"></label><button type="button" class="icon-button" id="notifications-button" aria-label="Notifications">♧</button><label class="language-switcher"><span>Language</span><select id="language-select" aria-label="Language"><option value="en">English</option><option value="ru">Русский</option><option value="de">Deutsch</option></select></label><button type="button" class="login-button" id="login-button">Sign in</button></div>
       </header>
       <div class="content">
         <section class="page-view active">
           <p class="eyebrow"><span class="live-pip"></span>ACCOUNT</p>
           <h1 class="store-view-title">Your profile</h1>
           <p class="store-view-subtitle">A simple overview of your QORUM account and arcade activity.</p>
-          <div class="profile-page-card"><div class="profile-page-avatar" id="profile-view-avatar">G</div><div class="profile-page-copy"><h2 id="profile-view-name">Guest player</h2><p id="profile-view-signin-method">Sign in to save your profile.</p><p id="profile-view-status">Guest profile · Sign in to continue</p></div></div>
+          <div class="profile-page-card"><div class="profile-page-avatar" id="profile-view-avatar">G</div><div class="profile-page-copy"><h2 id="profile-view-name">Guest player</h2><p id="profile-view-signin-method">Sign in to save your profile.</p><p id="profile-view-status">Guest profile · Sign in to continue</p><div class="avatar-upload-controls" id="avatar-upload-controls" hidden><label class="button-link" for="avatar-upload">Choose profile picture</label><input id="avatar-upload" type="file" accept="image/jpeg,image/png,image/webp" hidden><p id="avatar-upload-status" aria-live="polite"></p></div></div></div>
           <div class="profile-stats">
             <div class="profile-stat"><strong id="profile-game-count">4</strong><span>games in your collection</span></div>
             <div class="profile-stat"><strong id="profile-session-count">0</strong><span>total play time</span></div>
@@ -52,7 +52,7 @@
           <div class="section-heading"><div><h2>Play time by game</h2><p>Your recorded time on this account.</p></div></div>
           <div class="profile-game-times" id="profile-game-times"></div>
           <div class="profile-actions"><button type="button" class="primary-button" data-signin="true" id="profile-signin">Sign in or create account</button><a class="button-link" href="library.html">View my games</a></div>
-          <div class="profile-note">Play time is saved to your account when you are signed in. Only your username is shown to other players.</div>
+          <div class="profile-note">Play time is saved to your account when you are signed in. Your username and profile picture are visible to other players.</div>
         </section>
       </div>
     </main>

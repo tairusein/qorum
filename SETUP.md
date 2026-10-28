@@ -9,9 +9,11 @@ QORUM uses Supabase for username/password accounts, private direct messages, pla
 3. In Supabase **Authentication → URL Configuration**, set the site URL to `https://tairusein.github.io/qorum/` and add `https://tairusein.github.io/qorum/**` and `http://localhost:8000/**` to the allowed redirect URLs.
 4. `config.js` contains only the Supabase project URL and publishable key. These are intended to be public. Never put a `service_role` or secret key in this website.
 
-The database applies row-level security to profiles, messages, game sessions, and registration rate-limit records. Recovery codes are generated using cryptographic randomness; only a SHA-256 hash is stored. The recovery Edge Function checks the one-time code, updates the password through Supabase Auth, and replaces the old code with a new one shown once. QORUM never stores the user's password or includes it in the downloadable recovery card. Users must save the current code privately; without it, their password cannot be recovered because no email address is associated with the account.
+The database applies row-level security to profiles, messages, game sessions, and registration rate-limit records. Public chat is readable by everyone, while posting requires sign-in and is rate-limited. Profile pictures are public JPG, PNG, or WebP images up to 3 MB; users can upload and remove only their own files. Recovery codes are generated using cryptographic randomness; only a SHA-256 hash is stored. The recovery Edge Function checks the one-time code, updates the password through Supabase Auth, and replaces the old code with a new one shown once. QORUM never stores the user's password or includes it in the downloadable recovery card. Users must save the current code privately; without it, their password cannot be recovered because no email address is associated with the account.
 
 Game time is recorded using database timestamps and periodic heartbeats; a crashed or closed tab can add at most 45 seconds after its last heartbeat.
+
+The interface language can be changed from the selector in the top bar. English, Russian, and German are supported, and the selection is saved in the current browser.
 
 ## Publish on GitHub Pages
 

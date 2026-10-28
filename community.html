@@ -36,13 +36,20 @@
       <header class="topbar">
         <button type="button" class="icon-button mobile-menu" aria-label="Open menu" id="menu-button">☰</button>
         <nav class="top-links" aria-label="Site sections"><a class="top-link" href="index.html">Arcade</a><a class="top-link" href="library.html">My games</a><a class="top-link active" href="community.html" aria-current="page">Community</a><a class="top-link" href="profile.html">Profile</a><a class="top-link" href="stats.html">Statistics</a></nav>
-        <div class="top-actions"><label class="search-box" aria-label="Search games"><span aria-hidden="true">⌕</span><input id="game-search" type="search" placeholder="Search games..." autocomplete="off"></label><button type="button" class="icon-button" id="notifications-button" aria-label="Notifications">♧</button><button type="button" class="login-button" id="login-button">Sign in</button></div>
+        <div class="top-actions"><label class="search-box" aria-label="Search games"><span aria-hidden="true">⌕</span><input id="game-search" type="search" placeholder="Search games..." autocomplete="off"></label><button type="button" class="icon-button" id="notifications-button" aria-label="Notifications">♧</button><label class="language-switcher"><span>Language</span><select id="language-select" aria-label="Language"><option value="en">English</option><option value="ru">Русский</option><option value="de">Deutsch</option></select></label><button type="button" class="login-button" id="login-button">Sign in</button></div>
       </header>
       <div class="content">
         <section class="page-view active">
           <p class="eyebrow"><span class="live-pip"></span>YOUR PEOPLE</p>
           <h1 class="store-view-title">Community</h1>
-          <p class="store-view-subtitle">Find a player by username and send messages in real time.</p>
+          <p class="store-view-subtitle">Talk with everyone, or find a player for a private conversation.</p>
+          <div class="section-heading"><div><h2>Community chat</h2><p>Public messages can be seen by everyone. Sign in to join in.</p></div></div>
+          <section class="chat-panel public-chat-panel" aria-label="Public community chat">
+            <div class="chat-header"><span class="avatar">◎</span><span><strong>Everyone</strong><small>Live community chat</small></span></div>
+            <div class="chat-messages public-chat-messages" id="public-chat-messages" aria-live="polite"><div class="empty-state">Loading community chat…</div></div>
+            <form class="chat-form" id="public-chat-form"><input id="public-chat-input" type="text" placeholder="Write a message..." maxlength="500" aria-label="Public chat message" disabled><button type="submit" aria-label="Send public message" disabled>↑</button></form>
+            <p class="chat-notice">Keep it friendly. Messages are public and cannot be edited.</p>
+          </section>
           <form class="player-search-form" id="player-search-form"><input id="player-search" type="search" minlength="3" placeholder="Search usernames..." aria-label="Search users"><button class="primary-button" type="submit">Find players</button></form>
           <div class="player-results" id="player-results" aria-live="polite"></div>
           <div class="section-heading"><div><h2>Direct messages</h2><p>Private messages between your account and the selected player.</p></div></div>

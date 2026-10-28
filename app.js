@@ -26,8 +26,10 @@
     let activeGameCleanup = null;
     let currentUser = null;
     let currentUsername = "Guest player";
+    let currentAvatarPath = null;
     let activeChatUserId = null;
     let activeChatChannel = null;
+    let publicChatChannel = null;
     let activeTrackingSessionId = null;
     let trackingHeartbeat = null;
     let authView = "credentials";
@@ -40,24 +42,402 @@
     const searchInput = document.getElementById("game-search");
     const toast = document.getElementById("toast");
     const authModal = document.getElementById("auth-modal");
+    const languageSelect = document.getElementById("language-select");
+    const translations = {
+      "Discover": ["Обзор", "Entdecken"],
+      "Navigation": ["Навигация", "Navigation"],
+      "Main navigation": ["Главная навигация", "Hauptnavigation"],
+      "Arcade": ["Аркада", "Arcade"],
+      "My games": ["Мои игры", "Meine Spiele"],
+      "Community": ["Сообщество", "Community"],
+      "Profile": ["Профиль", "Profil"],
+      "Statistics": ["Статистика", "Statistiken"],
+      "Players": ["Игроки", "Spieler"],
+      "Account options": ["Настройки аккаунта", "Kontoeinstellungen"],
+      "Sign out": ["Выйти", "Abmelden"],
+      "Guest player": ["Гость", "Gastspieler"],
+      "Level 1 · Offline": ["Уровень 1 · Не в сети", "Stufe 1 · Offline"],
+      "Not signed in": ["Не выполнен вход", "Nicht angemeldet"],
+      "Search games": ["Поиск игр", "Spiele suchen"],
+      "Search games...": ["Поиск игр...", "Spiele suchen..."],
+      "Notifications": ["Уведомления", "Benachrichtigungen"],
+      "Sign in": ["Войти", "Anmelden"],
+      "My account": ["Мой аккаунт", "Mein Konto"],
+      "Language": ["Язык", "Sprache"],
+      "QORUM — Your games, your people": ["QORUM — ваши игры, ваши люди", "QORUM — deine Spiele, deine Leute"],
+      "A little arcade · Always free": ["Небольшая аркада · Всегда бесплатно", "Eine kleine Spielhalle · Immer kostenlos"],
+      "Small games.": ["Небольшие игры.", "Kleine Spiele."],
+      "Big breaks.": ["Большие перерывы.", "Große Pausen."],
+      "Four easy-to-pick-up classics for a quiet moment. No downloads, no fuss — just press play.": ["Четыре простые классические игры для спокойной паузы. Без загрузок и лишних сложностей — просто нажмите «Играть».", "Vier leicht zugängliche Klassiker für eine entspannte Pause. Keine Downloads, kein Aufwand — einfach auf Spielen drücken."],
+      "4 MINI GAMES": ["4 МИНИ-ИГРЫ", "4 MINISPIELE"],
+      "PLAY IN YOUR BROWSER": ["ИГРАЙТЕ В БРАУЗЕРЕ", "IM BROWSER SPIELEN"],
+      "Play Snake": ["Играть в Змейку", "Snake spielen"],
+      "Free to play": ["Бесплатно", "Kostenlos spielbar"],
+      "Browse games ↓": ["Смотреть игры ↓", "Spiele ansehen ↓"],
+      "Pick a game": ["Выберите игру", "Spiel auswählen"],
+      "Simple rules, instant play. Find your new little favorite.": ["Простые правила и мгновенный запуск. Найдите свою новую любимую игру.", "Einfache Regeln, sofort losspielen. Finde deinen neuen kleinen Favoriten."],
+      "A CLASSIC": ["КЛАССИКА", "EIN KLASSIKER"],
+      "ONE BUTTON": ["ОДНА КНОПКА", "EIN KNOPF"],
+      "VS COMPUTER": ["ПРОТИВ КОМПЬЮТЕРА", "GEGEN DEN COMPUTER"],
+      "TAKE IT SLOW": ["НЕ СПЕШИ", "GANZ ENTSPANNT"],
+      "FREE": ["БЕСПЛАТНО", "KOSTENLOS"],
+      "Ready to play": ["Готова к игре", "Spielbereit"],
+      "Your play time · ": ["Ваше время в игре · ", "Deine Spielzeit · "],
+      "✓ In your games": ["✓ В вашей коллекции", "✓ In deiner Sammlung"],
+      "Play now": ["Играть", "Jetzt spielen"],
+      "No games match that search. Try another title or genre.": ["По запросу ничего не найдено. Попробуйте другое название или жанр.", "Keine passenden Spiele gefunden. Probiere einen anderen Titel oder ein anderes Genre."],
+      "YOUR COLLECTION": ["ВАША КОЛЛЕКЦИЯ", "DEINE SAMMLUNG"],
+      "A quiet place for your favorite quick breaks.": ["Уютное место для любимых коротких игровых пауз.", "Ein ruhiger Ort für deine liebsten kurzen Spielpausen."],
+      "free games, ready to play": ["бесплатные игры готовы к запуску", "kostenlose Spiele, sofort spielbereit"],
+      "Your high scores are saved on this device.": ["Ваши рекорды сохранены на этом устройстве.", "Deine Bestwerte werden auf diesem Gerät gespeichert."],
+      "Browse arcade ↗": ["В аркаду ↗", "Zur Spielhalle ↗"],
+      "YOUR PEOPLE": ["ВАШЕ СООБЩЕСТВО", "DEINE COMMUNITY"],
+      "Talk with everyone, or find a player for a private conversation.": ["Общайтесь со всеми или найдите игрока для личной переписки.", "Chatte mit allen oder finde jemanden für eine private Unterhaltung."],
+      "Community chat": ["Общий чат", "Community-Chat"],
+      "Public messages can be seen by everyone. Sign in to join in.": ["Сообщения видны всем. Войдите, чтобы присоединиться.", "Nachrichten sind für alle sichtbar. Melde dich an, um mitzuschreiben."],
+      "Everyone": ["Все", "Alle"],
+      "Live community chat": ["Общий чат в реальном времени", "Community-Chat in Echtzeit"],
+      "Loading community chat…": ["Загрузка общего чата…", "Community-Chat wird geladen…"],
+      "Write a message...": ["Напишите сообщение...", "Nachricht schreiben..."],
+      "Public chat message": ["Сообщение в общий чат", "Nachricht im öffentlichen Chat"],
+      "Send public message": ["Отправить сообщение в общий чат", "Öffentliche Nachricht senden"],
+      "Keep it friendly. Messages are public and cannot be edited.": ["Общайтесь уважительно. Сообщения видны всем и не редактируются.", "Bleib freundlich. Nachrichten sind öffentlich und können nicht bearbeitet werden."],
+      "Search usernames...": ["Поиск по именам...", "Nutzernamen suchen..."],
+      "Search users": ["Поиск пользователей", "Nutzer suchen"],
+      "Find players": ["Найти игроков", "Spieler finden"],
+      "Direct messages": ["Личные сообщения", "Direktnachrichten"],
+      "Private messages between your account and the selected player.": ["Личная переписка между вами и выбранным игроком.", "Private Nachrichten zwischen dir und dem ausgewählten Spieler."],
+      "Chat with friends": ["Чат с друзьями", "Chat mit Freunden"],
+      "Choose a player": ["Выберите игрока", "Spieler auswählen"],
+      "Sign in to start a conversation.": ["Войдите, чтобы начать переписку.", "Melde dich an, um ein Gespräch zu beginnen."],
+      "Search for a username or select a player from the sidebar.": ["Найдите пользователя по имени или выберите игрока в боковом меню.", "Suche nach einem Nutzernamen oder wähle jemanden in der Seitenleiste aus."],
+      "Chat message": ["Сообщение в чате", "Chatnachricht"],
+      "Send message": ["Отправить сообщение", "Nachricht senden"],
+      "Messages are stored in your QORUM account and delivered in real time.": ["Сообщения хранятся в аккаунте QORUM и доставляются в реальном времени.", "Nachrichten werden in deinem QORUM-Konto gespeichert und in Echtzeit zugestellt."],
+      "ACCOUNT": ["АККАУНТ", "KONTO"],
+      "Your profile": ["Ваш профиль", "Dein Profil"],
+      "A simple overview of your QORUM account and arcade activity.": ["Обзор аккаунта QORUM и вашей игровой активности.", "Eine Übersicht über dein QORUM-Konto und deine Spielaktivität."],
+      "Sign in to save your profile.": ["Войдите, чтобы сохранить профиль.", "Melde dich an, um dein Profil zu speichern."],
+      "Guest profile · Sign in to continue": ["Гостевой профиль · Войдите, чтобы продолжить", "Gastprofil · Melde dich an, um fortzufahren"],
+      "Choose profile picture": ["Выбрать аватар", "Profilbild auswählen"],
+      "games in your collection": ["игр в коллекции", "Spiele in deiner Sammlung"],
+      "total play time": ["общее время игры", "gesamte Spielzeit"],
+      "best arcade result": ["лучший результат", "bester Spielhallen-Rekord"],
+      "Play time by game": ["Время игры по проектам", "Spielzeit pro Spiel"],
+      "Your recorded time on this account.": ["Время, записанное в вашем аккаунте.", "Die in deinem Konto erfasste Spielzeit."],
+      "Sign in or create account": ["Войти или создать аккаунт", "Anmelden oder Konto erstellen"],
+      "View my games": ["Мои игры", "Meine Spiele ansehen"],
+      "Play time is saved to your account when you are signed in. Your username and profile picture are visible to other players.": ["Время игры сохраняется в аккаунте после входа. Ваше имя и аватар видны другим игрокам.", "Deine Spielzeit wird gespeichert, wenn du angemeldet bist. Dein Nutzername und Profilbild sind für andere sichtbar."],
+      "COMMUNITY PLAYTIME": ["ИГРОВОЕ ВРЕМЯ СООБЩЕСТВА", "SPIELZEIT DER COMMUNITY"],
+      "Game statistics": ["Статистика игр", "Spielstatistiken"],
+      "Total play time recorded across QORUM accounts.": ["Общее время игры, записанное в аккаунтах QORUM.", "Erfasste Gesamtspielzeit aller QORUM-Konten."],
+      "Game": ["Игра", "Spiel"],
+      "Total play time": ["Общее время игры", "Gesamte Spielzeit"],
+      "Loading statistics…": ["Загрузка статистики…", "Statistiken werden geladen…"],
+      "Play time is measured while a signed-in player has a game open. Totals update as sessions are recorded.": ["Время учитывается, пока вошедший игрок находится в игре. Итоги обновляются по мере записи игровых сессий.", "Die Spielzeit wird erfasst, solange ein angemeldeter Spieler ein Spiel geöffnet hat. Die Summen werden laufend aktualisiert."],
+      "Welcome back": ["С возвращением", "Willkommen zurück"],
+      "Join QORUM": ["Присоединиться к QORUM", "QORUM beitreten"],
+      "Sign in with your username and password.": ["Войдите с именем пользователя и паролем.", "Melde dich mit Nutzername und Passwort an."],
+      "Create an account without an email address.": ["Создайте аккаунт без адреса электронной почты.", "Erstelle ein Konto ohne E-Mail-Adresse."],
+      "Use a username and password. Save your one-time recovery code somewhere private.": ["Используйте имя и пароль. Сохраните одноразовый код восстановления в надёжном месте.", "Verwende einen Nutzernamen und ein Passwort. Bewahre deinen einmaligen Wiederherstellungscode sicher auf."],
+      "No email address is used. Forgot your password? Use your recovery code.": ["Электронная почта не используется. Забыли пароль? Воспользуйтесь кодом восстановления.", "Es wird keine E-Mail-Adresse verwendet. Passwort vergessen? Nutze deinen Wiederherstellungscode."],
+      "Save the one-time recovery code after creating your account. It cannot be shown again.": ["Сохраните одноразовый код восстановления после регистрации. Повторно показать его нельзя.", "Speichere den einmaligen Wiederherstellungscode nach der Registrierung. Er kann nicht erneut angezeigt werden."],
+      "Username": ["Имя пользователя", "Nutzername"],
+      "Choose a username": ["Придумайте имя пользователя", "Nutzernamen wählen"],
+      "Password": ["Пароль", "Passwort"],
+      "At least 8 characters": ["Не менее 8 символов", "Mindestens 8 Zeichen"],
+      "3-24 letters, numbers, or _": ["3–24 буквы, цифры или _", "3–24 Buchstaben, Zahlen oder _"],
+      "Create account": ["Создать аккаунт", "Konto erstellen"],
+      "New here? Create an account": ["Впервые здесь? Создать аккаунт", "Neu hier? Konto erstellen"],
+      "Already have an account? Sign in": ["Уже есть аккаунт? Войти", "Schon ein Konto? Anmelden"],
+      "Forgot password? Use a recovery code": ["Забыли пароль? Используйте код восстановления", "Passwort vergessen? Wiederherstellungscode nutzen"],
+      "Account recovery": ["Восстановление аккаунта", "Kontowiederherstellung"],
+      "No email is needed; use the recovery code saved when you registered.": ["Почта не нужна — используйте код восстановления, сохранённый при регистрации.", "Keine E-Mail nötig. Nutze den bei der Registrierung gespeicherten Wiederherstellungscode."],
+      "Recover your account": ["Восстановить аккаунт", "Konto wiederherstellen"],
+      "Enter your username, saved recovery code, and a new password.": ["Введите имя пользователя, сохранённый код восстановления и новый пароль.", "Gib deinen Nutzernamen, Wiederherstellungscode und ein neues Passwort ein."],
+      "Recovery code": ["Код восстановления", "Wiederherstellungscode"],
+      "New password": ["Новый пароль", "Neues Passwort"],
+      "Reset password": ["Сбросить пароль", "Passwort zurücksetzen"],
+      "Back to sign in": ["Вернуться ко входу", "Zurück zur Anmeldung"],
+      "Saving recovery code": ["Сохранение кода восстановления", "Wiederherstellungscode wird gespeichert"],
+      "Your account is created. Keep this window open while the recovery code is saved.": ["Аккаунт создан. Не закрывайте окно, пока код восстановления сохраняется.", "Dein Konto wurde erstellt. Lass dieses Fenster geöffnet, bis der Code gespeichert wurde."],
+      "Try saving again": ["Повторить сохранение", "Erneut speichern"],
+      "Save your recovery code": ["Сохраните код восстановления", "Wiederherstellungscode speichern"],
+      "This code is shown only once. Keep it private and store it somewhere safe. It is not your password.": ["Этот код показывается только один раз. Храните его в надёжном месте и не передавайте другим. Это не ваш пароль.", "Dieser Code wird nur einmal angezeigt. Bewahre ihn sicher und geheim auf. Er ist nicht dein Passwort."],
+      "Copy code": ["Скопировать код", "Code kopieren"],
+      "Download recovery card": ["Скачать карточку восстановления", "Wiederherstellungskarte herunterladen"],
+      "I've saved it — continue": ["Я сохранил код — продолжить", "Gespeichert — weiter"],
+      "Close": ["Закрыть", "Schließen"],
+      "Close game": ["Закрыть игру", "Spiel schließen"],
+      "Restart game": ["Перезапустить игру", "Spiel neu starten"],
+      "Arcade · Classic": ["Аркада · Классика", "Arcade · Klassiker"],
+      "Arcade · One-button": ["Аркада · Одна кнопка", "Arcade · Ein Knopf"],
+      "Arcade · Solo": ["Аркада · Для одного", "Arcade · Einzelspieler"],
+      "Puzzle · Relaxing": ["Головоломка · Спокойная", "Puzzle · Entspannt"],
+      "A classic": ["Классика", "Ein Klassiker"],
+      "Collect the little apples. Don't bump into the walls or your own tail.": ["Собирайте яблоки. Не врезайтесь в стены и собственный хвост.", "Sammle die Äpfel. Stoße nicht gegen Wände oder deinen eigenen Schwanz."],
+      "Arrow keys or WASD · use the buttons on mobile": ["Стрелки или WASD · на телефоне используйте кнопки", "Pfeiltasten oder WASD · auf dem Handy die Schaltflächen"],
+      "Tap to flap between the gates. How far can you glide?": ["Нажимайте, чтобы пролетать между воротами. Как далеко получится добраться?", "Tippe, um zwischen den Toren hindurchzufliegen. Wie weit schaffst du es?"],
+      "Space, ↑ or tap the game to flap": ["Пробел, ↑ или нажмите на игру", "Leertaste, ↑ oder tippe ins Spiel"],
+      "Keep the ball in play and score five points against the computer.": ["Не дайте мячу упасть и наберите пять очков против компьютера.", "Halte den Ball im Spiel und erziele fünf Punkte gegen den Computer."],
+      "W / S or ↑ / ↓ · move your paddle with the mouse": ["W / S или ↑ / ↓ · двигайте ракетку мышью", "W / S oder ↑ / ↓ · bewege den Schläger mit der Maus"],
+      "Turn over two cards at a time and find all eight matching pairs.": ["Открывайте по две карты и найдите все восемь пар.", "Decke jeweils zwei Karten auf und finde alle acht Paare."],
+      "Tap or click two cards to reveal a pair": ["Нажмите на две карты, чтобы найти пару", "Klicke zwei Karten an, um ein Paar zu finden"],
+      "That username is already taken. Please choose another.": ["Это имя уже занято. Выберите другое.", "Dieser Nutzername ist bereits vergeben. Bitte wähle einen anderen."],
+      "Username or password is incorrect.": ["Неверное имя пользователя или пароль.", "Nutzername oder Passwort ist falsch."],
+      "Account service is unavailable. Check your connection and try again.": ["Сервис аккаунтов недоступен. Проверьте подключение и попробуйте снова.", "Der Kontodienst ist nicht verfügbar. Prüfe deine Verbindung und versuche es erneut."],
+      "You are signed in.": ["Вы вошли в аккаунт.", "Du bist angemeldet."],
+      "You have signed out.": ["Вы вышли из аккаунта.", "Du hast dich abgemeldet."],
+      "Your profile details could not be loaded.": ["Не удалось загрузить данные профиля.", "Deine Profildaten konnten nicht geladen werden."],
+      "Player list could not be loaded.": ["Не удалось загрузить список игроков.", "Die Spielerliste konnte nicht geladen werden."],
+      "No other players yet.": ["Пока других игроков нет.", "Noch keine anderen Spieler."],
+      "QORUM player": ["Игрок QORUM", "QORUM-Spieler"],
+      "Enter at least 3 characters to search.": ["Для поиска введите не менее 3 символов.", "Gib mindestens 3 Zeichen für die Suche ein."],
+      "No players found. Check the username and try again.": ["Игроки не найдены. Проверьте имя и попробуйте снова.", "Keine Spieler gefunden. Überprüfe den Namen und versuche es erneut."],
+      "You can also save this code in a password manager.": ["Можно также сохранить код в менеджере паролей.", "Du kannst den Code auch in einem Passwortmanager speichern."],
+      "Profile picture updated.": ["Аватар обновлён.", "Profilbild aktualisiert."],
+      "Choose a JPG, PNG, or WebP image up to 3 MB.": ["Выберите изображение JPG, PNG или WebP размером до 3 МБ.", "Wähle ein JPG-, PNG- oder WebP-Bild bis 3 MB aus."],
+      "The picture could not be uploaded. Please try again.": ["Не удалось загрузить изображение. Попробуйте ещё раз.", "Das Bild konnte nicht hochgeladen werden. Bitte versuche es erneut."],
+      "Your picture updated, but the previous image could not be removed.": ["Аватар обновлён, но предыдущее изображение удалить не удалось.", "Dein Bild wurde aktualisiert, aber das vorherige konnte nicht gelöscht werden."],
+      "No messages yet. Start the conversation.": ["Сообщений пока нет. Начните разговор.", "Noch keine Nachrichten. Beginne das Gespräch."],
+      "Community chat is temporarily unavailable.": ["Общий чат временно недоступен.", "Der Community-Chat ist vorübergehend nicht verfügbar."],
+      "Please wait a moment before sending another message.": ["Подождите немного, прежде чем отправить следующее сообщение.", "Bitte warte einen Moment, bevor du die nächste Nachricht sendest."],
+      "Your message could not be sent.": ["Не удалось отправить сообщение.", "Deine Nachricht konnte nicht gesendet werden."],
+      "Sign in to send a message in community chat.": ["Войдите, чтобы писать в общий чат.", "Melde dich an, um im Community-Chat zu schreiben."],
+      "Sign in to find and message players.": ["Войдите, чтобы искать игроков и писать им.", "Melde dich an, um Spieler zu suchen und ihnen zu schreiben."],
+      "Sign in to message other QORUM players.": ["Войдите, чтобы писать другим игрокам QORUM.", "Melde dich an, um anderen QORUM-Spielern zu schreiben."],
+      "Message could not be sent.": ["Не удалось отправить сообщение.", "Nachricht konnte nicht gesendet werden."],
+      "Messages could not be loaded.": ["Не удалось загрузить сообщения.", "Nachrichten konnten nicht geladen werden."],
+      "That player could not be found.": ["Игрок не найден.", "Dieser Spieler wurde nicht gefunden."],
+      "Play-time tracking was interrupted.": ["Учёт игрового времени прерван.", "Die Spielzeiterfassung wurde unterbrochen."],
+      "Your play-time totals could not be loaded.": ["Не удалось загрузить игровое время.", "Deine Spielzeit konnte nicht geladen werden."],
+      "Account service unavailable.": ["Сервис аккаунтов недоступен.", "Kontodienst nicht verfügbar."],
+      "minutes": ["минут", "Minuten"],
+      "hour": ["час", "Stunde"],
+      "hours": ["часов", "Stunden"],
+      "No email address is used.": ["Электронная почта не используется.", "Es wird keine E-Mail-Adresse verwendet."],
+      "Restart": ["Перезапустить", "Neustart"],
+      "Score": ["Счёт", "Punktestand"],
+      "moves": ["ходов", "Züge"],
+      "Best ": ["Рекорд ", "Bestwert "],
+      "Your play time": ["Ваше время в игре", "Deine Spielzeit"],
+      "Best": ["Рекорд", "Bestwert"],
+      "Total": ["Всего", "Gesamt"],
+      "No email is used; sign in with your username and password.": ["Почта не используется; войдите с именем пользователя и паролем.", "Keine E-Mail nötig; melde dich mit Nutzername und Passwort an."],
+      "Copy failed. Select the code and copy it manually.": ["Не удалось скопировать. Выделите код и скопируйте его вручную.", "Kopieren fehlgeschlagen. Markiere den Code und kopiere ihn manuell."],
+      "Recovery code copied. Store it privately.": ["Код скопирован. Храните его в надёжном месте.", "Code kopiert. Bewahre ihn sicher auf."],
+      "Could not create the recovery card.": ["Не удалось создать карточку восстановления.", "Die Wiederherstellungskarte konnte nicht erstellt werden."],
+      "Recovery card downloaded. Keep the image somewhere private.": ["Карточка скачана. Храните изображение в надёжном месте.", "Karte heruntergeladen. Bewahre das Bild sicher auf."],
+      "Snake": ["Змейка", "Snake"],
+      "Sky Hopper": ["Птичка", "Himmelsflieger"],
+      "Pocket Pong": ["Карманный пинг-понг", "Taschen-Pong"],
+      "Memory Garden": ["Сад памяти", "Gartengedächtnis"],
+      "Start the conversation with a message.": ["Начните разговор, отправив сообщение.", "Beginne das Gespräch mit einer Nachricht."],
+      "Almost done": ["Почти готово", "Fast geschafft"],
+      "Your account is ready. Save your recovery code before continuing.": ["Аккаунт готов. Сохраните код восстановления, прежде чем продолжить.", "Dein Konto ist bereit. Speichere den Wiederherstellungscode, bevor du fortfährst."],
+      "Save your recovery code before leaving this page.": ["Сохраните код восстановления, прежде чем покинуть страницу.", "Speichere den Wiederherstellungscode, bevor du diese Seite verlässt."],
+      "Password reset. Sign in with your new password.": ["Пароль изменён. Войдите с новым паролем.", "Passwort zurückgesetzt. Melde dich mit deinem neuen Passwort an."],
+      "Your account is ready. Sign in with your username and password.": ["Аккаунт готов. Войдите с именем пользователя и паролем.", "Dein Konto ist bereit. Melde dich mit Nutzername und Passwort an."],
+      "Enter a valid username and recovery code, and a password between 8 and 72 characters.": ["Введите корректные имя пользователя и код восстановления, а также пароль длиной от 8 до 72 символов.", "Gib einen gültigen Nutzernamen und Wiederherstellungscode sowie ein Passwort mit 8 bis 72 Zeichen ein."],
+      "The password was changed, but a new recovery code could not be confirmed. Contact the site owner before continuing.": ["Пароль изменён, но новый код восстановления подтвердить не удалось. Свяжитесь с владельцем сайта, прежде чем продолжить.", "Das Passwort wurde geändert, aber der neue Wiederherstellungscode konnte nicht bestätigt werden. Wende dich an den Website-Betreiber."],
+      "Your previous recovery code was used. Save this replacement code before signing in.": ["Старый код восстановления использован. Сохраните новый код перед входом.", "Dein vorheriger Wiederherstellungscode wurde verwendet. Speichere den neuen Code, bevor du dich anmeldest."],
+      "You filled the whole garden! A perfect game.": ["Вы заполнили весь сад! Идеальная игра.", "Du hast den ganzen Garten gefüllt! Perfekt gespielt."],
+      "Move up": ["Двигаться вверх", "Nach oben bewegen"],
+      "Move left": ["Двигаться влево", "Nach links bewegen"],
+      "Move down": ["Двигаться вниз", "Nach unten bewegen"],
+      "Move right": ["Двигаться вправо", "Nach rechts bewegen"],
+      "Statistics are unavailable until the account service is configured.": ["Статистика будет доступна после настройки сервиса аккаунтов.", "Statistiken sind verfügbar, sobald der Kontodienst eingerichtet ist."],
+      "Statistics could not be loaded. Please try again later.": ["Не удалось загрузить статистику. Попробуйте позже.", "Statistiken konnten nicht geladen werden. Bitte versuche es später erneut."],
+      "Uploading your profile picture…": ["Загрузка аватара…", "Profilbild wird hochgeladen…"],
+      "The picture uploaded, but your profile could not be updated.": ["Изображение загружено, но профиль не удалось обновить.", "Das Bild wurde hochgeladen, aber dein Profil konnte nicht aktualisiert werden."],
+      "Picture updated. The previous image could not be removed.": ["Аватар обновлён. Предыдущее изображение удалить не удалось.", "Bild aktualisiert. Das vorherige Bild konnte nicht gelöscht werden."],
+      "Sign in to find players.": ["Войдите, чтобы искать игроков.", "Melde dich an, um Spieler zu finden."],
+      "QORUM home": ["На главную QORUM", "QORUM-Startseite"],
+      "Open menu": ["Открыть меню", "Menü öffnen"],
+      "Could not load the public community chat.": ["Не удалось загрузить общий чат.", "Der Community-Chat konnte nicht geladen werden."],
+      "Live chat updates are temporarily unavailable.": ["Обновления чата временно недоступны.", "Live-Chat-Aktualisierungen sind vorübergehend nicht verfügbar."],
+      "Sign in to upload a profile picture.": ["Войдите, чтобы загрузить аватар.", "Melde dich an, um ein Profilbild hochzuladen."],
+      "Your sign-in status could not be restored.": ["Не удалось восстановить состояние входа.", "Dein Anmeldestatus konnte nicht wiederhergestellt werden."],
+      "Account recovery is temporarily unavailable.": ["Восстановление аккаунта временно недоступно.", "Die Kontowiederherstellung ist vorübergehend nicht verfügbar."],
+      "Check the username, recovery code, and new password.": ["Проверьте имя пользователя, код восстановления и новый пароль.", "Überprüfe Nutzername, Wiederherstellungscode und neues Passwort."],
+      "Could not open the selected player's profile.": ["Не удалось открыть профиль выбранного игрока.", "Das Profil des ausgewählten Spielers konnte nicht geöffnet werden."],
+      "Your password was changed. Save the new recovery code.": ["Пароль изменён. Сохраните новый код восстановления.", "Dein Passwort wurde geändert. Speichere den neuen Wiederherstellungscode."],
+      "Password could not be changed. Please try again.": ["Не удалось изменить пароль. Попробуйте ещё раз.", "Das Passwort konnte nicht geändert werden. Bitte versuche es erneut."],
+      "Contact the site owner before continuing.": ["Свяжитесь с владельцем сайта, прежде чем продолжить.", "Wende dich an den Website-Betreiber, bevor du fortfährst."],
+      "Distance": ["Дистанция", "Distanz"],
+      "Moves": ["Ходы", "Züge"],
+      "You": ["Вы", "Du"],
+      "Computer": ["Компьютер", "Computer"],
+      "You win!": ["Вы победили!", "Du gewinnst!"],
+      "Good game!": ["Хорошая игра!", "Gutes Spiel!"],
+      "Nice try!": ["Хорошая попытка!", "Guter Versuch!"],
+      "Lovely flight!": ["Отличный полёт!", "Toller Flug!"],
+      "Your score: ": ["Ваш счёт: ", "Dein Punktestand: "],
+      "Press ↻ to play again": ["Нажмите ↻, чтобы сыграть ещё раз", "Drücke ↻ für eine neue Runde"],
+      "Press space or tap to take off": ["Нажмите пробел или коснитесь экрана, чтобы взлететь", "Leertaste drücken oder tippen zum Start"],
+      "Run over": ["Игра окончена", "Spiel vorbei"],
+      "You passed": ["Вы прошли", "Du hast"],
+      "gate": ["преграду", "Tor"],
+      "gates": ["преград", "Tore"],
+      "Press ↻ to fly again.": ["Нажмите ↻, чтобы лететь снова.", "Drücke ↻, um erneut zu fliegen."],
+      " · You passed ": [" · Вы прошли ", " · Du hast "],
+      " · Press ↻ to fly again.": [" · Нажмите ↻, чтобы лететь снова.", " · Drücke ↻, um erneut zu fliegen."],
+      "Final score ": ["Итоговый счёт ", "Endstand "],
+      "Press ↻ to try again": ["Нажмите ↻, чтобы попробовать ещё раз", "Drücke ↻, um es erneut zu versuchen"],
+      "You win! Press ↻ for a rematch.": ["Вы победили! Нажмите ↻ для реванша.", "Du gewinnst! Drücke ↻ für eine Revanche."],
+      "Good game! Press ↻ for another round.": ["Хорошая игра! Нажмите ↻ для нового раунда.", "Gutes Spiel! Drücke ↻ für eine neue Runde."],
+      "Hidden garden card": ["Закрытая карточка сада", "Verdeckte Gartenkarte"],
+      "Game over · Final score ": ["Игра окончена · Итоговый счёт ", "Spiel vorbei · Endstand "],
+      ". Press ↻ to try again.": [". Нажмите ↻, чтобы попробовать ещё раз.", ". Drücke ↻, um es erneut zu versuchen."],
+      "A lovely match · All pairs found in ": ["Отличная пара · Все пары найдены за ", "Schön kombiniert · Alle Paare in "],
+      " moves!": [" ходов!", " Zügen!"],
+      " · Press ↻ to play again": [" · Нажмите ↻, чтобы сыграть ещё раз", " · Drücke ↻ für eine neue Runde"],
+    };
+    const languageIndex = { ru: 0, de: 1 };
+    const translationSources = new Map();
+    Object.entries(translations).forEach(([source, translatedValues]) => {
+      translatedValues.forEach(value => {
+        if (value !== source) translationSources.set(value, source);
+      });
+    });
+    const originalTextNodes = new WeakMap();
+    const textNodeLanguages = new WeakMap();
+    const originalAttributes = new WeakMap();
+    const attributeLanguages = new WeakMap();
+    let currentLanguage = "en";
+    try {
+      const savedLanguage = localStorage.getItem("qorum-language");
+      if (savedLanguage === "ru" || savedLanguage === "de") currentLanguage = savedLanguage;
+    } catch (error) {
+      console.warn("Could not read the saved language preference.", error);
+    }
+
+    function translatedValue(value) {
+      if (currentLanguage === "en") return value;
+      const entry = translations[value];
+      return entry ? entry[languageIndex[currentLanguage]] : value;
+    }
+
+    function originalValue(value) {
+      const leading = value.match(/^\s*/)[0];
+      const trailing = value.match(/\s*$/)[0];
+      const phrase = value.trim();
+      return `${leading}${translationSources.get(phrase) || phrase}${trailing}`;
+    }
+
+    function localizeTextNode(node, dynamic = false) {
+      const value = node.nodeValue;
+      if (!value || !value.trim()) return;
+      if (dynamic) {
+        originalTextNodes.set(node, originalValue(value));
+        textNodeLanguages.delete(node);
+      } else if (!originalTextNodes.has(node)) {
+        originalTextNodes.set(node, value);
+      }
+      if (textNodeLanguages.get(node) === currentLanguage) return;
+      const original = originalTextNodes.get(node);
+      const leading = original.match(/^\s*/)[0];
+      const trailing = original.match(/\s*$/)[0];
+      const phrase = original.trim();
+      const localized = `${leading}${translatedValue(phrase)}${trailing}`;
+      if (node.nodeValue !== localized) node.nodeValue = localized;
+      textNodeLanguages.set(node, currentLanguage);
+    }
+
+    function localizeAttribute(element, attribute, dynamic = false) {
+      const value = element.getAttribute(attribute);
+      if (value === null || !value.trim()) return;
+      let originals = originalAttributes.get(element);
+      if (!originals) {
+        originals = new Map();
+        originalAttributes.set(element, originals);
+      }
+      let languages = attributeLanguages.get(element);
+      if (!languages) {
+        languages = new Map();
+        attributeLanguages.set(element, languages);
+      }
+      if (dynamic || !originals.has(attribute)) {
+        originals.set(attribute, dynamic ? originalValue(value) : value);
+        languages.delete(attribute);
+      }
+      if (languages.get(attribute) === currentLanguage) return;
+      const localized = translatedValue(originals.get(attribute).trim());
+      if (element.getAttribute(attribute) !== localized) element.setAttribute(attribute, localized);
+      languages.set(attribute, currentLanguage);
+    }
+
+    function localizeTree(root = document, dynamic = false) {
+      document.documentElement.lang = currentLanguage;
+      if (languageSelect) languageSelect.value = currentLanguage;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) localizeTextNode(node, dynamic);
+      const elements = root === document ? document.querySelectorAll("*") : [root, ...root.querySelectorAll("*")];
+      elements.forEach(element => {
+        ["placeholder", "aria-label", "title"].forEach(attribute => localizeAttribute(element, attribute, dynamic));
+      });
+    }
+
+    function setLanguage(language) {
+      if (!(language in { en: true, ru: true, de: true })) return;
+      currentLanguage = language;
+      try {
+        localStorage.setItem("qorum-language", language);
+      } catch (error) {
+        console.warn("Could not save the language preference.", error);
+      }
+      localizeTree();
+    }
+
+    const languageObserver = new MutationObserver(records => {
+      for (const record of records) {
+        if (record.type === "characterData") {
+          localizeTextNode(record.target, true);
+        } else {
+          record.addedNodes.forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) localizeTextNode(node, true);
+            else if (node.nodeType === Node.ELEMENT_NODE) localizeTree(node, true);
+          });
+          if (record.type === "attributes") localizeAttribute(record.target, record.attributeName, true);
+        }
+      }
+    });
+    languageObserver.observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["placeholder", "aria-label", "title"],
+    });
+    localizeTree();
+    if (languageSelect) languageSelect.addEventListener("change", () => setLanguage(languageSelect.value));
 
     function formatDuration(seconds) {
       const minutes = Math.floor(Math.max(0, Number(seconds) || 0) / 60);
       const hours = Math.floor(minutes / 60);
       const remainingMinutes = minutes % 60;
+      if (currentLanguage === "ru") return hours
+        ? `${hours} ч ${remainingMinutes} мин`
+        : `${remainingMinutes} мин`;
+      if (currentLanguage === "de") return hours
+        ? `${hours} Std. ${remainingMinutes} Min.`
+        : `${remainingMinutes} Min.`;
       return hours ? `${hours}h ${remainingMinutes}m` : `${remainingMinutes}m`;
     }
 
     function renderGameCard(game) {
       const bestScore = Number(localStorage.getItem(`playroom-score-${game.id}`)) || 0;
-      const scoreLabel = bestScore ? `Best ${bestScore}${game.id === "memory-garden" ? " moves" : ""}` : "Ready to play";
+      const scoreLabel = bestScore
+        ? `${translatedValue("Best ")}${bestScore}${game.id === "memory-garden" ? ` ${translatedValue("moves")}` : ""}`
+        : translatedValue("Ready to play");
       return `<article class="game-card">
-        <div class="game-cover ${game.cover}"><span class="cover-symbol" aria-hidden="true">${game.symbol}</span><span class="cover-label">${game.badge}</span></div>
+        <div class="game-cover ${game.cover}"><span class="cover-symbol" aria-hidden="true">${game.symbol}</span><span class="cover-label">${translatedValue(game.badge)}</span></div>
         <div class="game-info">
-          <div class="game-title-line"><h3 class="game-title">${game.title}</h3><span class="game-rating">FREE</span></div>
-          <div class="game-meta"><span>${game.genre}</span><span class="price">${scoreLabel}</span></div>
-          <div class="game-playtime">Your play time · ${formatDuration(personalGameSeconds[game.id])}</div>
-          <div class="game-actions"><span class="library-status">✓ In your games</span><button class="primary-button" type="button" data-play="${game.id}">Play now</button></div>
+          <div class="game-title-line"><h3 class="game-title">${translatedValue(game.title)}</h3><span class="game-rating">${translatedValue("FREE")}</span></div>
+          <div class="game-meta"><span>${translatedValue(game.genre)}</span><span class="price">${scoreLabel}</span></div>
+          <div class="game-playtime">${translatedValue("Your play time · ")}${formatDuration(personalGameSeconds[game.id])}</div>
+          <div class="game-actions"><span class="library-status">${translatedValue("✓ In your games")}</span><button class="primary-button" type="button" data-play="${game.id}">${translatedValue("Play now")}</button></div>
         </div>
       </article>`;
     }
@@ -89,6 +469,19 @@
       toast.classList.add("visible");
       window.clearTimeout(toastTimer);
       toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 2600);
+    }
+
+    function setAvatar(element, username, avatarPath) {
+      if (!element) return;
+      if (avatarPath && backendClient) {
+        const { data } = backendClient.storage.from("avatars").getPublicUrl(avatarPath);
+        const image = document.createElement("img");
+        image.src = data.publicUrl;
+        image.alt = `${username} avatar`;
+        element.replaceChildren(image);
+      } else {
+        element.textContent = username ? username.slice(0, 1).toUpperCase() : "?";
+      }
     }
 
     function openAuth(mode) {
@@ -446,10 +839,10 @@
       context.textAlign = "center";
       context.fillStyle = "#e9e7e1";
       context.font = "600 25px system-ui, sans-serif";
-      context.fillText(title, canvas.width / 2, canvas.height / 2 - 7);
+      context.fillText(translatedValue(title), canvas.width / 2, canvas.height / 2 - 7);
       context.fillStyle = "#c1c0bb";
       context.font = "13px system-ui, sans-serif";
-      context.fillText(subtitle, canvas.width / 2, canvas.height / 2 + 20);
+      context.fillText(translatedValue(subtitle), canvas.width / 2, canvas.height / 2 + 20);
     }
 
     function makeCanvasStage(instruction, scoreMarkup = "") {
@@ -503,7 +896,7 @@
       function endGame() {
         stopped = true;
         window.clearInterval(timer);
-        endMessage.textContent = `Game over · Final score ${score}. Press ↻ to try again.`;
+        endMessage.textContent = `${translatedValue("Game over · Final score ")}${score}${translatedValue(". Press ↻ to try again.")}`;
         rememberScore("snake", score);
       }
 
@@ -515,7 +908,7 @@
         if (head.x < 0 || head.x >= columns || head.y < 0 || head.y >= rows || body.some(part => part.x === head.x && part.y === head.y)) {
           endGame();
           draw();
-          drawCanvasMessage(context, canvas, "Nice try!", `Your score: ${score} · Press ↻ to play again`);
+          drawCanvasMessage(context, canvas, "Nice try!", `${translatedValue("Your score: ")}${score} · ${translatedValue("Press ↻ to play again")}`);
           return;
         }
         snake.unshift(head);
@@ -620,9 +1013,9 @@
       function finish() {
         if (stopped) return;
         stopped = true;
-        endMessage.textContent = `Run over · You passed ${score} ${score === 1 ? "gate" : "gates"}. Press ↻ to fly again.`;
+        endMessage.textContent = `${translatedValue("Run over")} · ${translatedValue("You passed")} ${score} ${translatedValue(score === 1 ? "gate" : "gates")}. ${translatedValue("Press ↻ to fly again.")}`;
         rememberScore("sky-hop", score);
-        drawCanvasMessage(context, canvas, "Lovely flight!", `You passed ${score} ${score === 1 ? "gate" : "gates"} · Press ↻ to try again`);
+        drawCanvasMessage(context, canvas, "Lovely flight!", `${translatedValue("You passed")} ${score} ${translatedValue(score === 1 ? "gate" : "gates")} · ${translatedValue("Press ↻ to try again")}`);
       }
 
       function loop(timestamp) {
@@ -650,7 +1043,7 @@
           createObstacle(canvas.width - 40);
         }
         draw();
-        if (stopped) drawCanvasMessage(context, canvas, "Lovely flight!", `You passed ${score} ${score === 1 ? "gate" : "gates"} · Press ↻ to try again`);
+        if (stopped) drawCanvasMessage(context, canvas, "Lovely flight!", `${translatedValue("You passed")} ${score} ${translatedValue(score === 1 ? "gate" : "gates")} · ${translatedValue("Press ↻ to try again")}`);
         else if (!started && timestamp > 0) drawCanvasMessage(context, canvas, "Sky Hopper", "Press space or tap to take off");
         if (!stopped) frameId = requestAnimationFrame(loop);
       }
@@ -705,9 +1098,9 @@
         updateScore();
         if (player.score >= 5 || opponent.score >= 5) {
           stopped = true;
-          endMessage.textContent = player.score >= 5 ? "You win! Press ↻ for a rematch." : "Good game! Press ↻ for another round.";
+          endMessage.textContent = translatedValue(player.score >= 5 ? "You win! Press ↻ for a rematch." : "Good game! Press ↻ for another round.");
           rememberScore("pocket-pong", player.score);
-          drawCanvasMessage(context, canvas, player.score >= 5 ? "You win!" : "Good game!", `Final score ${player.score}–${opponent.score} · Press ↻ to play again`);
+          drawCanvasMessage(context, canvas, player.score >= 5 ? "You win!" : "Good game!", `${translatedValue("Final score ")}${player.score}–${opponent.score}${translatedValue(" · Press ↻ to play again")}`);
           return;
         }
         ball.x = canvas.width / 2;
@@ -793,7 +1186,7 @@
           selected = [];
           matched += 1;
           if (matched === symbols.length) {
-            endMessage.textContent = `A lovely match · All pairs found in ${moves} moves!`;
+            endMessage.textContent = `${translatedValue("A lovely match · All pairs found in ")}${moves}${translatedValue(" moves!")}`;
             const key = "playroom-score-memory-garden";
             const best = Number(localStorage.getItem(key)) || 0;
             if (!best || moves < best) localStorage.setItem(key, String(moves));
@@ -880,7 +1273,7 @@
       messages.scrollTop = messages.scrollHeight;
     }
 
-    async function loadConversation(userId, username) {
+    async function loadConversation(userId, username, avatarPath = null) {
       if (!backendClient || !currentUser) {
         showToast("Sign in to message other QORUM players.");
         openAuth("signin");
@@ -897,7 +1290,7 @@
       if (!title || !messages) return;
       title.textContent = username;
       if (status) status.textContent = "Direct messages";
-      if (avatar) avatar.textContent = username.slice(0, 1).toUpperCase();
+      setAvatar(avatar, username, avatarPath);
       if (input) input.disabled = false;
       if (submit) submit.disabled = false;
       document.querySelectorAll(".friend").forEach(friend => {
@@ -941,15 +1334,129 @@
         .subscribe();
     }
 
+    function renderPublicChatMessage(message) {
+      const messages = document.getElementById("public-chat-messages");
+      if (!messages || messages.querySelector(`[data-message-id="${message.id}"]`)) return;
+      const emptyState = messages.querySelector(".empty-state");
+      if (emptyState) emptyState.remove();
+
+      const profile = Array.isArray(message.profiles) ? message.profiles[0] : message.profiles;
+      const item = document.createElement("article");
+      item.className = "message public-message";
+      item.dataset.messageId = message.id;
+      const avatar = document.createElement("span");
+      avatar.className = "avatar";
+      setAvatar(avatar, profile?.username || "QORUM player", profile?.avatar_path);
+      const copy = document.createElement("div");
+      copy.className = "public-message-copy";
+      const name = document.createElement("strong");
+      name.textContent = profile?.username || "QORUM player";
+      const time = document.createElement("span");
+      time.className = "message-time";
+      time.textContent = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" })
+        .format(new Date(message.created_at));
+      const text = document.createElement("p");
+      text.className = "public-message-text";
+      text.textContent = message.content;
+      copy.append(name, time, text);
+      item.append(avatar, copy);
+      messages.append(item);
+      while (messages.children.length > 100) messages.firstElementChild.remove();
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function loadPublicChatMessages() {
+      const messages = document.getElementById("public-chat-messages");
+      if (!messages || !backendClient) return;
+      const { data, error } = await backendClient
+        .from("public_chat_messages")
+        .select("id,sender_id,content,created_at,profiles(username,avatar_path)")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) {
+        console.error("Could not load the public community chat.", error);
+        messages.replaceChildren();
+        const notice = document.createElement("div");
+        notice.className = "empty-state";
+        notice.textContent = "Community chat is temporarily unavailable.";
+        messages.append(notice);
+        return;
+      }
+      messages.replaceChildren();
+      if (!data.length) {
+        const emptyState = document.createElement("div");
+        emptyState.className = "empty-state";
+        emptyState.textContent = "No messages yet. Start the conversation.";
+        messages.append(emptyState);
+      } else {
+        data.reverse().forEach(renderPublicChatMessage);
+      }
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function initializePublicChat() {
+      const form = document.getElementById("public-chat-form");
+      const messages = document.getElementById("public-chat-messages");
+      if (!form || !messages || !backendClient) return;
+
+      void loadPublicChatMessages();
+      if (publicChatChannel) return;
+      publicChatChannel = backendClient.channel("public-community-chat")
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "public_chat_messages",
+        }, () => {
+          void loadPublicChatMessages();
+        })
+        .subscribe(status => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.error("The public community chat realtime connection failed.", status);
+            showToast("Live chat updates are temporarily unavailable.");
+          }
+        });
+
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        const input = document.getElementById("public-chat-input");
+        const submit = form.querySelector("button[type='submit']");
+        const content = input.value.trim();
+        if (!currentUser) {
+          showToast("Sign in to send a message in community chat.");
+          openAuth("signin");
+          return;
+        }
+        if (!content || content.length > 500) return;
+
+        submit.disabled = true;
+        const { data, error } = await backendClient
+          .from("public_chat_messages")
+          .insert({ sender_id: currentUser.id, content })
+          .select("id,sender_id,content,created_at,profiles(username,avatar_path)")
+          .single();
+        submit.disabled = !currentUser;
+        if (error) {
+          console.error("Could not send a public community chat message.", error);
+          showToast(error.message.includes("Please wait")
+            ? "Please wait a moment before sending another message."
+            : "Your message could not be sent.");
+          return;
+        }
+        renderPublicChatMessage(data);
+        input.value = "";
+      });
+    }
+
     function createPlayerButton(player) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "friend";
       button.dataset.userId = player.id;
       button.dataset.username = player.username;
+      button.dataset.avatarPath = player.avatar_path || "";
       const avatar = document.createElement("span");
       avatar.className = "avatar";
-      avatar.textContent = player.username.slice(0, 1).toUpperCase();
+      setAvatar(avatar, player.username, player.avatar_path);
       const info = document.createElement("span");
       info.className = "friend-info";
       const name = document.createElement("span");
@@ -970,7 +1477,7 @@
       const ownerId = currentUser.id;
       const { data, error } = await backendClient
         .from("profiles")
-        .select("id,username")
+        .select("id,username,avatar_path")
         .neq("id", currentUser.id)
         .order("username")
         .limit(50);
@@ -998,7 +1505,7 @@
       }
       const { data, error } = await backendClient
         .from("profiles")
-        .select("id,username")
+        .select("id,username,avatar_path")
         .ilike("username", `%${query}%`)
         .neq("id", currentUser.id)
         .order("username")
@@ -1149,7 +1656,7 @@
       const userId = player.dataset.userId;
       const username = player.dataset.username;
       if (document.getElementById("chat-title")) {
-        loadConversation(userId, username);
+        loadConversation(userId, username, player.dataset.avatarPath || null);
       } else {
         window.location.href = `community.html?user=${encodeURIComponent(userId)}`;
       }
@@ -1169,7 +1676,7 @@
         if (!currentUser) return;
         const { data, error } = await backendClient
           .from("profiles")
-          .select("id,username")
+          .select("id,username,avatar_path")
           .eq("id", requestedUser)
           .maybeSingle();
         if (error) {
@@ -1177,7 +1684,7 @@
           showToast("That player could not be found.");
           return;
         }
-        if (data) loadConversation(data.id, data.username);
+        if (data) loadConversation(data.id, data.username, data.avatar_path);
       }, { once: true });
     }
 
@@ -1196,6 +1703,10 @@
     }
     const profileAction = document.getElementById("profile-action");
     if (profileAction) profileAction.addEventListener("click", signOutOrOpenLogin);
+    const avatarUpload = document.getElementById("avatar-upload");
+    if (avatarUpload) avatarUpload.addEventListener("change", () => {
+      if (avatarUpload.files?.[0]) void uploadProfileAvatar(avatarUpload.files[0]);
+    });
     const profileSignin = document.getElementById("profile-signin");
     if (profileSignin) profileSignin.addEventListener("click", signOutOrOpenLogin);
     const modalSwitch = document.getElementById("modal-switch");
@@ -1328,10 +1839,89 @@
       showToast("You have signed out.");
     }
 
+    async function uploadProfileAvatar(file) {
+      const input = document.getElementById("avatar-upload");
+      const status = document.getElementById("avatar-upload-status");
+      const mimeExtensions = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+      };
+      if (!currentUser || !backendClient) {
+        showToast("Sign in to upload a profile picture.");
+        return;
+      }
+      if (!file || !mimeExtensions[file.type] || file.size > 3 * 1024 * 1024 || file.size === 0) {
+        if (status) status.textContent = "Choose a JPG, PNG, or WebP image up to 3 MB.";
+        return;
+      }
+
+      const ownerId = currentUser.id;
+      const oldAvatarPath = currentAvatarPath;
+      const extension = mimeExtensions[file.type];
+      const newAvatarPath = `${ownerId}/${Date.now()}.${extension}`;
+      if (input) input.disabled = true;
+      if (status) status.textContent = "Uploading your profile picture…";
+
+      const { error: uploadError } = await backendClient.storage
+        .from("avatars")
+        .upload(newAvatarPath, file, {
+          cacheControl: "3600",
+          contentType: file.type,
+          upsert: false,
+        });
+      if (uploadError) {
+        console.error("Could not upload the profile picture.", uploadError);
+        if (status) status.textContent = "The picture could not be uploaded. Please try again.";
+        if (input) input.disabled = false;
+        return;
+      }
+
+      const { error: profileError } = await backendClient
+        .from("profiles")
+        .update({ avatar_path: newAvatarPath })
+        .eq("id", ownerId);
+      if (profileError) {
+        console.error("Could not save the profile picture to your profile.", profileError);
+        const { error: cleanupError } = await backendClient.storage.from("avatars").remove([newAvatarPath]);
+        if (cleanupError) console.error("Could not remove the unlinked profile picture.", cleanupError);
+        if (status) status.textContent = "The picture uploaded, but your profile could not be updated.";
+        if (input) input.disabled = false;
+        return;
+      }
+      if (currentUser?.id !== ownerId) {
+        if (input) input.disabled = false;
+        return;
+      }
+
+      currentAvatarPath = newAvatarPath;
+      document.querySelectorAll(".profile-card .avatar").forEach(element => {
+        setAvatar(element, currentUsername, currentAvatarPath);
+      });
+      setAvatar(document.getElementById("profile-view-avatar"), currentUsername, currentAvatarPath);
+
+      if (oldAvatarPath && oldAvatarPath !== newAvatarPath) {
+        const { error: cleanupError } = await backendClient.storage.from("avatars").remove([oldAvatarPath]);
+        if (cleanupError) {
+          console.error("Could not remove the previous profile picture.", cleanupError);
+          if (status) status.textContent = "Picture updated. The previous image could not be removed.";
+          showToast("Your picture updated, but the previous image could not be removed.");
+        }
+      }
+      if (status && !status.textContent.startsWith("Picture updated.")) {
+        status.textContent = "Profile picture updated.";
+      }
+      if (input) {
+        input.value = "";
+        input.disabled = false;
+      }
+    }
+
     async function updateProfileUI(user) {
       if (!backendClient) {
         currentUser = null;
         currentUsername = "Guest player";
+        currentAvatarPath = null;
         const status = document.getElementById("profile-view-status");
         if (status) status.textContent = "Account service unavailable.";
       } else {
@@ -1346,10 +1936,11 @@
         }
         currentUser = user;
         currentUsername = "Guest player";
+        currentAvatarPath = null;
         if (currentUser) {
           const { data, error } = await backendClient
             .from("profiles")
-            .select("username")
+            .select("username,avatar_path")
             .eq("id", currentUser.id)
             .maybeSingle();
           if (error) {
@@ -1357,6 +1948,7 @@
             showToast("Your profile details could not be loaded.");
           } else if (data) {
             currentUsername = data.username;
+            currentAvatarPath = data.avatar_path;
           }
         }
       }
@@ -1374,7 +1966,16 @@
       if (signinMethod) signinMethod.textContent = currentUser
         ? "Username sign-in · Save your recovery code privately"
         : "Sign in to save your profile.";
-      if (avatar) avatar.textContent = currentUser ? currentUsername.slice(0, 1).toUpperCase() : "G";
+      setAvatar(avatar, currentUser ? currentUsername : "Guest", currentUser ? currentAvatarPath : null);
+      document.querySelectorAll(".profile-card .avatar").forEach(element => {
+        setAvatar(element, currentUser ? currentUsername : "Guest", currentUser ? currentAvatarPath : null);
+      });
+      const avatarControls = document.getElementById("avatar-upload-controls");
+      if (avatarControls) avatarControls.hidden = !currentUser;
+      const publicChatInput = document.getElementById("public-chat-input");
+      const publicChatSubmit = document.querySelector("#public-chat-form button[type='submit']");
+      if (publicChatInput) publicChatInput.disabled = !currentUser;
+      if (publicChatSubmit) publicChatSubmit.disabled = !currentUser;
       if (accountStatus) accountStatus.textContent = currentUser ? "QORUM account · Signed in" : "Guest profile · Sign in to continue";
       const profileSignin = document.getElementById("profile-signin");
       if (profileSignin) profileSignin.textContent = currentUser ? "Sign out" : "Sign in or create account";
@@ -1431,6 +2032,7 @@
       console.error("Supabase configuration is missing or the client library did not load.");
       showToast("Account service is not configured.");
     }
+    initializePublicChat();
     updateProfileUI();
     loadPublicPlaytime();
     renderGames();
