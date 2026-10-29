@@ -152,6 +152,7 @@ button:active:not(:disabled), .button-link:active { transform: translateY(0) sca
   background: transparent;
   cursor: pointer;
   text-align: left;
+  transition: background .15s ease;
 }
 .friend:hover, .friend.selected { background: #25282c; }
 .avatar-wrap { position: relative; flex: 0 0 auto; }
@@ -372,6 +373,7 @@ button:active:not(:disabled), .button-link:active { transform: translateY(0) sca
   cursor: pointer;
   font-size: 11px;
   font-weight: 650;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
 }
 .filter-chip.active, .filter-chip:hover {
   border-color: rgba(197, 209, 180, .45);
