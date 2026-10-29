@@ -1,0 +1,3 @@
+## 2026-10-29 - [Missing Transitions on Interactive Elements]
+**Learning:** Interactive UI components like `.friend` (list items) and `.filter-chip` (buttons) were missing CSS `transition` properties for their hover states, resulting in abrupt, janky visual micro-interactions when interacted with by the user.
+**Action:** Always ensure that interactive elements have a smooth CSS `transition` defined for properties that change on hover, focus, or active states (like background, color, and border-color) to provide a polished user experience.
