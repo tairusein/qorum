@@ -15,14 +15,19 @@ const sandbox = {
         location: { hash: '' },
         addEventListener: () => {},
         matchMedia: () => ({ matches: false, addEventListener: () => {} }),
-        supabase: { createClient: () => {} }
-    },
-    document: {
-        createTreeWalker: () => ({ nextNode: () => null }),
-        getElementById: () => ({ addEventListener: () => {}, classList: { add: () => {}, remove: () => {} }, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
-        querySelector: () => ({ addEventListener: () => {}, classList: { add: () => {}, remove: () => {} }, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
-        querySelectorAll: () => [],
-        createElement: () => ({ addEventListener: () => {}, classList: { add: () => {}, remove: () => {} }, style: {}, appendChild: () => {} }),
+supabase: { createClient: () => {} },
+            setTimeout: () => 0,
+            clearTimeout: () => {},
+            setInterval: () => 0,
+            clearInterval: () => {},
+            dispatchEvent: () => {}
+        },
+        document: {
+            createTreeWalker: () => ({ nextNode: () => null }),
+            getElementById: () => ({ querySelectorAll: () => [], getAttribute: () => null, setAttribute: () => {}, value: '', replaceChildren: () => {}, addEventListener: () => {}, classList: { add: () => {} }, remove: () => {}, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
+            querySelector: () => ({ querySelectorAll: () => [], getAttribute: () => null, setAttribute: () => {}, value: '', replaceChildren: () => {}, addEventListener: () => {}, classList: { add: () => {} }, remove: () => {}, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
+            querySelectorAll: () => [],
+            createElement: () => ({ querySelectorAll: () => [], getAttribute: () => null, setAttribute: () => {}, value: '', replaceChildren: () => {}, addEventListener: () => {}, classList: { add: () => {} }, remove: () => {}, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
         body: { appendChild: () => {}, classList: { add: () => {}, remove: () => {} } },
         documentElement: { style: { setProperty: () => {} }, lang: 'en' },
         addEventListener: () => {}
@@ -40,7 +45,8 @@ const sandbox = {
     BroadcastChannel: class { constructor() {} postMessage() {} close() {} },
     CustomEvent: class { constructor() {} },
     NodeFilter: { SHOW_TEXT: 4 },
-    URLSearchParams: class { constructor() {} get() { return null; } has() { return false; } }
+    URLSearchParams: class { constructor() {} get() { return null; } has() { return false; } },
+    Event: class {}
 };
 
 vm.createContext(sandbox);
