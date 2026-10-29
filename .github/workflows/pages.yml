@@ -25,11 +25,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-      - name: Inject Supabase Credentials
-        run: |
-          cp config.example.js config.js
-          sed -i 's|__SUPABASE_URL__|${{ secrets.SUPABASE_URL }}|g' config.js
-          sed -i 's|__SUPABASE_PUBLISHABLE_KEY__|${{ secrets.SUPABASE_PUBLISHABLE_KEY }}|g' config.js
       - name: Upload site files
         uses: actions/upload-pages-artifact@v3
         with:
