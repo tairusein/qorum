@@ -1,0 +1,32 @@
+name: Cloud AI Agent
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  run-agent:
+    # Запускается, если в новом Issue есть метка 'ai' или комментарий начинается с '@ai'
+    if: |
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'ai')) ||
+      (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '@ai'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Gemini Agent
+        uses: google-github-actions/run-gemini-cli@v1
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            Реши задачу, описанную пользователем. 
+            Внеси изменения в код, создай новую ветку и открой Pull Request.
+            Задача: ${{ github.event.comment.body || github.event.issue.body }}
