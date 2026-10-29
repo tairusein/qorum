@@ -652,7 +652,10 @@ function localizeTree(root = document, dynamic = false) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let node;
   while ((node = walker.nextNode())) localizeTextNode(node, dynamic);
-  const elements = root === document ? document.querySelectorAll("*") : [root, ...root.querySelectorAll("*")];
+  // ⚡ Bolt Optimization: Use specific attribute selectors instead of '*' to let the browser's
+  // highly optimized CSS engine filter nodes natively. This avoids checking every single
+  // DOM element in JS, significantly reducing CPU cycles and improving initial render speed.
+  const elements = root === document ? document.querySelectorAll("[placeholder], [aria-label], [title]") : [root, ...root.querySelectorAll("[placeholder], [aria-label], [title]")];
   elements.forEach(element => {
     ["placeholder", "aria-label", "title"].forEach(attribute => localizeAttribute(element, attribute, dynamic));
   });
