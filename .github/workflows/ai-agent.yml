@@ -29,9 +29,11 @@ jobs:
       - name: Install and Run Gemini CLI
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_CLI_TRUST_WORKSPACE: "true"
+          USER_TASK: ${{ github.event.comment.body || github.event.issue.body }}
         run: |
           npm install -g @google/gemini-cli
-          gemini -p "Внеси изменения в файлы репозитория по этой задаче (не делай git commit сам, только измени файлы): ${{ github.event.comment.body || github.event.issue.body }}" --yolo
+          gemini -p "Внеси изменения в файлы репозитория по этой задаче (не делай git commit сам, только измени файлы): $USER_TASK" --yolo --skip-trust
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
