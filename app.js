@@ -699,15 +699,15 @@ languageObserver.observe(document.body, {
 localizeTree();
 if (languageSelect) languageSelect.addEventListener("change", () => setLanguage(languageSelect.value));
 
-function formatDuration(seconds) {
+function formatDuration(seconds, lang = typeof currentLanguage !== "undefined" ? currentLanguage : "en") {
   const totalSec = Math.max(0, Number(seconds) || 0);
   const minutes = Math.floor(totalSec / 60);
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
-  if (currentLanguage === "ru") return hours
+  if (lang === "ru") return hours
     ? `${hours} ч ${remainingMinutes} мин`
     : `${remainingMinutes} мин`;
-  if (currentLanguage === "de") return hours
+  if (lang === "de") return hours
     ? `${hours} Std. ${remainingMinutes} Min.`
     : `${remainingMinutes} Min.`;
   return hours ? `${hours}h ${remainingMinutes}m` : `${remainingMinutes}m`;
@@ -5202,3 +5202,6 @@ initializePublicChat();
 updateProfileUI();
 loadPublicPlaytime();
 renderGames();
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { formatDuration };
+}
