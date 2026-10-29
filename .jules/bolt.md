@@ -1,0 +1,3 @@
+## 2026-10-29 - [Avoid `querySelectorAll("*")` in `localizeTree`]
+**Learning:** Using `querySelectorAll("*")` for attribute localization is a codebase-specific anti-pattern causing massive redundant iterations, forcing iteration over every single DOM element instead of only those with translatable attributes.
+**Action:** Replace `querySelectorAll("*")` with a specific selector like `querySelectorAll("[placeholder], [aria-label], [title]")` to target only the necessary elements, avoiding unnecessary DOM traversal and improving performance.
