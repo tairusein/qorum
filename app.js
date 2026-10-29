@@ -649,16 +649,28 @@ function localizeAttribute(element, attribute, dynamic = false) {
 function localizeTree(root = document, dynamic = false) {
   document.documentElement.lang = currentLanguage;
   if (languageSelect) languageSelect.value = currentLanguage;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  // ⚡ Bolt Optimization: Combine text node and element traversal into a single TreeWalker pass.
+  // This eliminates the need for a separate querySelectorAll pass, significantly reducing DOM
+  // traversal overhead and avoiding double-processing of the DOM tree.
+
+  // Explicitly check the root node first since TreeWalker skips it
+  if (root.nodeType === Node.ELEMENT_NODE) {
+    if (root.hasAttribute("placeholder")) localizeAttribute(root, "placeholder", dynamic);
+    if (root.hasAttribute("aria-label")) localizeAttribute(root, "aria-label", dynamic);
+    if (root.hasAttribute("title")) localizeAttribute(root, "title", dynamic);
+  }
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
   let node;
-  while ((node = walker.nextNode())) localizeTextNode(node, dynamic);
-  // ⚡ Bolt Optimization: Use specific attribute selectors instead of '*' to let the browser's
-  // highly optimized CSS engine filter nodes natively. This avoids checking every single
-  // DOM element in JS, significantly reducing CPU cycles and improving initial render speed.
-  const elements = root === document ? document.querySelectorAll("[placeholder], [aria-label], [title]") : [root, ...root.querySelectorAll("[placeholder], [aria-label], [title]")];
-  elements.forEach(element => {
-    ["placeholder", "aria-label", "title"].forEach(attribute => localizeAttribute(element, attribute, dynamic));
-  });
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      localizeTextNode(node, dynamic);
+    } else {
+      if (node.hasAttribute("placeholder")) localizeAttribute(node, "placeholder", dynamic);
+      if (node.hasAttribute("aria-label")) localizeAttribute(node, "aria-label", dynamic);
+      if (node.hasAttribute("title")) localizeAttribute(node, "title", dynamic);
+    }
+  }
 }
 
 function setLanguage(language) {
