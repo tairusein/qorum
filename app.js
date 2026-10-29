@@ -778,10 +778,12 @@ function renderGames() {
   if (libraryTotal) libraryTotal.textContent = library.length;
 }
 
-document.querySelectorAll("#game-filters [data-filter]").forEach(btn => {
+// ⚡ Bolt Optimization: Cache the query selection to avoid repeated DOM traversals on every click event
+const filterButtons = document.querySelectorAll("#game-filters [data-filter]");
+filterButtons.forEach(btn => {
   btn.addEventListener("click", () => {
     activeFilter = btn.dataset.filter;
-    document.querySelectorAll("#game-filters [data-filter]").forEach(b => b.classList.toggle("active", b === btn));
+    filterButtons.forEach(b => b.classList.toggle("active", b === btn));
     renderGames();
   });
 });
