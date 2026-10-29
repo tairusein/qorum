@@ -763,7 +763,9 @@ function renderGames() {
   const matched = games.filter(filterPass);
   const ownedGames = games.filter(game => library.includes(game.id) && filterPass(game));
   if (featuredGames) {
-    featuredGames.innerHTML = matched.map(game => renderGameCard(game)).join("")
+    // ⚡ Bolt: Use reduce instead of map().join("") to avoid intermediate array allocation overhead.
+    // This improves rendering performance by avoiding unnecessary GC pauses during DOM updates.
+    featuredGames.innerHTML = matched.reduce((acc, game) => acc + renderGameCard(game), "")
       || `<div class="empty-state">${translatedValue("No games match that search. Try another title or genre.")}</div>`;
   }
   if (libraryGames) {
