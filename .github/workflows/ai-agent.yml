@@ -2,7 +2,7 @@ name: Cloud AI Agent
 
 on:
   issues:
-    types: [opened]
+    types: [opened, labeled]
   issue_comment:
     types: [created]
 
@@ -13,7 +13,6 @@ permissions:
 
 jobs:
   run-agent:
-    # Запускается, если в новом Issue есть метка 'ai' или комментарий начинается с '@ai'
     if: |
       (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'ai')) ||
       (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '@ai'))
@@ -22,11 +21,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Gemini Agent
-        uses: google-github-actions/run-gemini-cli@v1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          prompt: |
-            Реши задачу, описанную пользователем. 
-            Внеси изменения в код, создай новую ветку и открой Pull Request.
-            Задача: ${{ github.event.comment.body || github.event.issue.body }}
+          node-version: '22'
+
+      - name: Install and Run Gemini CLI
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          npm install -g @google/gemini-cli
+          gemini -p "Внеси изменения в файлы репозитория по этой задаче (не делай git commit сам, только измени файлы): ${{ github.event.comment.body || github.event.issue.body }}" --yolo
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "AI changes for issue #${{ github.event.issue.number }}"
+          branch: "ai-fix-issue-${{ github.event.issue.number }}"
+          title: "AI Fix: ${{ github.event.issue.title }}"
+          body: "Автоматические правки по задаче #${{ github.event.issue.number }}"
