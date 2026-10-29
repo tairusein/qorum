@@ -1201,6 +1201,12 @@ const GAME_PREFIX_MAP = {
   "connect-four": "C",
   "tank-brawl": "B"
 };
+
+// Expose for testing
+if (typeof module !== "undefined" && module.exports) {
+  module.exports.GAME_PREFIX_MAP = GAME_PREFIX_MAP;
+}
+
 const PREFIX_GAME_MAP = {
   T: "tic-tac-toe",
   H: "neon-duel",
@@ -1303,6 +1309,11 @@ function generateRoomCode(gameId) {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
+}
+
+// Expose for testing
+if (typeof module !== "undefined" && module.exports) {
+  module.exports.generateRoomCode = generateRoomCode;
 }
 
 function createMultiplayerController({ game, container, extraToolbarHtml = "", onModeChange, onMessage, onPeerReady, onRematch }) {
@@ -5202,3 +5213,11 @@ initializePublicChat();
 updateProfileUI();
 loadPublicPlaytime();
 renderGames();
+
+// Expose for testing
+if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+        generateRoomCode,
+        GAME_PREFIX_MAP
+    };
+}
