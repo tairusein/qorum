@@ -18,7 +18,7 @@ function responseHeaders(origin: string | null): Record<string, string> {
   };
 }
 
-function jsonResponse(
+export function jsonResponse(
   status: number,
   origin: string | null,
   body: Record<string, unknown>,

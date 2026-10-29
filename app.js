@@ -5203,5 +5203,9 @@ updateProfileUI();
 loadPublicPlaytime();
 renderGames();
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { formatDuration };
+  module.exports = {
+    formatDuration,
+    generateRoomCode,
+    GAME_PREFIX_MAP
+  };
 }
