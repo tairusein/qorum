@@ -7,7 +7,7 @@ QORUM uses Supabase for username/password accounts, private direct messages, pla
 1. The database migrations in `supabase/migrations/` are applied to the QORUM Supabase project (`snwmsqkpzetqnaniltdf`, EU West).
 2. The `register-account` and `recover-account` Edge Functions are deployed to this project. Registration uses the server-side Auth Admin API to create confirmed accounts without sending email, and limits each connection to five attempts per hour. The functions use Supabase's server-side secret key, which Supabase provides to Edge Functions; never add that key to the website or repository.
 3. In Supabase **Authentication → URL Configuration**, set the site URL to `https://tairusein.github.io/qorum/` and add `https://tairusein.github.io/qorum/**` and `http://localhost:8000/**` to the allowed redirect URLs.
-4. `config.js` contains only the Supabase project URL and publishable key. These are intended to be public. Never put a `service_role` or secret key in this website.
+4. `config.example.js` contains placeholders for the Supabase project URL and publishable key. For local development, you must copy it to `config.js` and manually replace `__SUPABASE_URL__` and `__SUPABASE_PUBLISHABLE_KEY__` with your actual project URL and publishable key. These values are intended to be public. Never put a `service_role` or secret key in this website.
 
 The database applies row-level security to profiles, messages, game sessions, and registration rate-limit records. Public chat is readable by everyone, while posting requires sign-in and is rate-limited. Profile pictures are public JPG, PNG, or WebP images up to 3 MB; users can upload and remove only their own files. Recovery codes are generated using cryptographic randomness; only a SHA-256 hash is stored. The recovery Edge Function checks the one-time code, updates the password through Supabase Auth, and replaces the old code with a new one shown once. QORUM never stores the user's password or includes it in the downloadable recovery card. Users must save the current code privately; without it, their password cannot be recovered because no email address is associated with the account.
 
@@ -20,8 +20,9 @@ The interface language can be changed from the selector in the top bar. English,
 The workflow in `.github/workflows/pages.yml` publishes this folder when changes are pushed to the `main` branch.
 
 1. The repository is `tairusein/qorum`; commit and push changes to its `main` branch.
-2. In repository **Settings → Pages**, choose **GitHub Actions** as the build and deployment source.
-3. Wait for the workflow to finish, then use `https://tairusein.github.io/qorum/` as the site URL in Supabase Authentication.
+2. In repository **Settings → Secrets and variables → Actions**, add the `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` repository secrets. These will be injected into `config.js` during deployment.
+3. In repository **Settings → Pages**, choose **GitHub Actions** as the build and deployment source.
+4. Wait for the workflow to finish, then use `https://tairusein.github.io/qorum/` as the site URL in Supabase Authentication.
 
 GitHub Pages is static hosting; the Supabase project is the live backend. GitHub Pages deploys the static files; database migrations and Edge Function changes must also be applied/deployed to Supabase.
 
