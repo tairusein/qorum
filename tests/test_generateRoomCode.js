@@ -15,19 +15,19 @@ const sandbox = {
         location: { hash: '' },
         addEventListener: () => {},
         matchMedia: () => ({ matches: false, addEventListener: () => {} }),
-        supabase: { createClient: () => {} },
-        setTimeout: () => 0,
-        clearTimeout: () => {},
-        setInterval: () => 0,
-        clearInterval: () => {},
-        dispatchEvent: () => {}
-    },
-    document: {
-        createTreeWalker: () => ({ nextNode: () => null }),
-        getElementById: () => ({ querySelectorAll: () => [], getAttribute: () => null, setAttribute: () => {}, value: '', replaceChildren: () => {}, addEventListener: () => {}, classList: { add: () => {}, remove: () => {} }, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
-        querySelector: () => ({ querySelectorAll: () => [], getAttribute: () => null, setAttribute: () => {}, value: '', replaceChildren: () => {}, addEventListener: () => {}, classList: { add: () => {}, remove: () => {} }, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
-        querySelectorAll: () => [],
-        createElement: () => ({ querySelectorAll: () => [], getAttribute: () => null, setAttribute: () => {}, value: '', replaceChildren: () => {}, addEventListener: () => {}, classList: { add: () => {}, remove: () => {} }, style: {}, appendChild: () => {} }),
+supabase: { createClient: () => {} },
+            setTimeout: () => 0,
+            clearTimeout: () => {},
+            setInterval: () => 0,
+            clearInterval: () => {},
+            dispatchEvent: () => {}
+        },
+        document: {
+            createTreeWalker: () => ({ nextNode: () => null }),
+            getElementById: () => ({ querySelectorAll: () => [], getAttribute: () => null, setAttribute: () => {}, value: '', replaceChildren: () => {}, addEventListener: () => {}, classList: { add: () => {} }, remove: () => {}, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
+            querySelector: () => ({ querySelectorAll: () => [], getAttribute: () => null, setAttribute: () => {}, value: '', replaceChildren: () => {}, addEventListener: () => {}, classList: { add: () => {} }, remove: () => {}, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
+            querySelectorAll: () => [],
+            createElement: () => ({ querySelectorAll: () => [], getAttribute: () => null, setAttribute: () => {}, value: '', replaceChildren: () => {}, addEventListener: () => {}, classList: { add: () => {} }, remove: () => {}, style: {}, appendChild: () => {}, removeChild: () => {}, innerHTML: '' }),
         body: { appendChild: () => {}, classList: { add: () => {}, remove: () => {} } },
         documentElement: { style: { setProperty: () => {} }, lang: 'en' },
         addEventListener: () => {}
@@ -37,10 +37,10 @@ const sandbox = {
     location: { hash: '' },
     console: { log: () => {}, error: () => {}, warn: () => {} },
     Math: Math,
-    setTimeout: () => 0,
-    setInterval: () => 0,
-    clearTimeout: () => {},
-    clearInterval: () => {},
+    setTimeout: setTimeout,
+    setInterval: setInterval,
+    clearTimeout: clearTimeout,
+    clearInterval: clearInterval,
     MutationObserver: class { constructor() {} observe() {} disconnect() {} },
     BroadcastChannel: class { constructor() {} postMessage() {} close() {} },
     CustomEvent: class { constructor() {} },
@@ -54,7 +54,7 @@ vm.createContext(sandbox);
 try {
     vm.runInContext(appJsCode, sandbox);
 } catch (e) {
-    // console.error(e);
+    // Expect some UI specific errors, but the function exports should succeed
 }
 
 if (!sandbox.module.exports.generateRoomCode) {

@@ -649,16 +649,28 @@ function localizeAttribute(element, attribute, dynamic = false) {
 function localizeTree(root = document, dynamic = false) {
   document.documentElement.lang = currentLanguage;
   if (languageSelect) languageSelect.value = currentLanguage;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  // ⚡ Bolt Optimization: Combine text node and element traversal into a single TreeWalker pass.
+  // This eliminates the need for a separate querySelectorAll pass, significantly reducing DOM
+  // traversal overhead and avoiding double-processing of the DOM tree.
+
+  // Explicitly check the root node first since TreeWalker skips it
+  if (root.nodeType === Node.ELEMENT_NODE) {
+    if (root.hasAttribute("placeholder")) localizeAttribute(root, "placeholder", dynamic);
+    if (root.hasAttribute("aria-label")) localizeAttribute(root, "aria-label", dynamic);
+    if (root.hasAttribute("title")) localizeAttribute(root, "title", dynamic);
+  }
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
   let node;
-  while ((node = walker.nextNode())) localizeTextNode(node, dynamic);
-  // ⚡ Bolt Optimization: Use specific attribute selectors instead of '*' to let the browser's
-  // highly optimized CSS engine filter nodes natively. This avoids checking every single
-  // DOM element in JS, significantly reducing CPU cycles and improving initial render speed.
-  const elements = root === document ? document.querySelectorAll("[placeholder], [aria-label], [title]") : [root, ...root.querySelectorAll("[placeholder], [aria-label], [title]")];
-  elements.forEach(element => {
-    ["placeholder", "aria-label", "title"].forEach(attribute => localizeAttribute(element, attribute, dynamic));
-  });
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      localizeTextNode(node, dynamic);
+    } else {
+      if (node.hasAttribute("placeholder")) localizeAttribute(node, "placeholder", dynamic);
+      if (node.hasAttribute("aria-label")) localizeAttribute(node, "aria-label", dynamic);
+      if (node.hasAttribute("title")) localizeAttribute(node, "title", dynamic);
+    }
+  }
 }
 
 function setLanguage(language) {
@@ -727,29 +739,84 @@ function renderGameCard(game) {
   } else if (game.multiplayer) {
     scoreLabel = translatedValue("Online · 2P · AI");
   }
-  const modePill = game.multiplayer
-    ? `<span class="cover-mode-pill mp">⚔️ ${translatedValue("ONLINE MULTIPLAYER")}</span>`
-    : `<span class="cover-mode-pill">🕹️ ${translatedValue("SOLO ARCADE")}</span>`;
-  return `<article class="game-card${game.multiplayer ? " is-multiplayer" : ""}">
-    <div class="game-cover ${game.cover}">
-      ${modePill}
-      <span class="cover-symbol" aria-hidden="true">${game.symbol}</span>
-      <span class="cover-label">${translatedValue(game.badge)}</span>
-    </div>
-    <div class="game-info">
-      <div class="game-title-line">
-        <h3 class="game-title">${translatedValue(game.title)}</h3>
-        <span class="game-rating${game.multiplayer ? " mp-tag" : ""}">${translatedValue(game.multiplayer ? "1v1 ONLINE" : "FREE")}</span>
-      </div>
-      <p class="game-desc-short">${translatedValue(game.shortDesc || game.instructions)}</p>
-      <div class="game-meta"><span>${translatedValue(game.genre)}</span><span class="price">${scoreLabel}</span></div>
-      <div class="game-playtime">${translatedValue("Your play time · ")}${formatDuration(personalGameSeconds[game.id])}</div>
-      <div class="game-actions">
-        <span class="library-status">${game.multiplayer ? `🌐 ${translatedValue("Room / 2P / AI")}` : translatedValue("✓ In your games")}</span>
-        <button class="primary-button" type="button" data-play="${game.id}">${translatedValue(game.multiplayer ? "Play match" : "Play now")}</button>
-      </div>
-    </div>
-  </article>`;
+
+  const article = document.createElement("article");
+  article.className = `game-card${game.multiplayer ? " is-multiplayer" : ""}`;
+
+  const gameCover = document.createElement("div");
+  gameCover.className = `game-cover ${game.cover}`;
+
+  const modePill = document.createElement("span");
+  modePill.className = game.multiplayer ? "cover-mode-pill mp" : "cover-mode-pill";
+  modePill.textContent = game.multiplayer ? `⚔️ ${translatedValue("ONLINE MULTIPLAYER")}` : `🕹️ ${translatedValue("SOLO ARCADE")}`;
+
+  const coverSymbol = document.createElement("span");
+  coverSymbol.className = "cover-symbol";
+  coverSymbol.setAttribute("aria-hidden", "true");
+  coverSymbol.textContent = game.symbol;
+
+  const coverLabel = document.createElement("span");
+  coverLabel.className = "cover-label";
+  coverLabel.textContent = translatedValue(game.badge);
+
+  gameCover.append(modePill, coverSymbol, coverLabel);
+
+  const gameInfo = document.createElement("div");
+  gameInfo.className = "game-info";
+
+  const gameTitleLine = document.createElement("div");
+  gameTitleLine.className = "game-title-line";
+
+  const gameTitle = document.createElement("h3");
+  gameTitle.className = "game-title";
+  gameTitle.textContent = translatedValue(game.title);
+
+  const gameRating = document.createElement("span");
+  gameRating.className = `game-rating${game.multiplayer ? " mp-tag" : ""}`;
+  gameRating.textContent = translatedValue(game.multiplayer ? "1v1 ONLINE" : "FREE");
+
+  gameTitleLine.append(gameTitle, gameRating);
+
+  const gameDescShort = document.createElement("p");
+  gameDescShort.className = "game-desc-short";
+  gameDescShort.textContent = translatedValue(game.shortDesc || game.instructions);
+
+  const gameMeta = document.createElement("div");
+  gameMeta.className = "game-meta";
+
+  const genreSpan = document.createElement("span");
+  genreSpan.textContent = translatedValue(game.genre);
+
+  const priceSpan = document.createElement("span");
+  priceSpan.className = "price";
+  priceSpan.textContent = scoreLabel;
+
+  gameMeta.append(genreSpan, priceSpan);
+
+  const gamePlaytime = document.createElement("div");
+  gamePlaytime.className = "game-playtime";
+  gamePlaytime.textContent = `${translatedValue("Your play time · ")}${formatDuration(personalGameSeconds[game.id])}`;
+
+  const gameActions = document.createElement("div");
+  gameActions.className = "game-actions";
+
+  const libraryStatus = document.createElement("span");
+  libraryStatus.className = "library-status";
+  libraryStatus.textContent = game.multiplayer ? `🌐 ${translatedValue("Room / 2P / AI")}` : translatedValue("✓ In your games");
+
+  const primaryButton = document.createElement("button");
+  primaryButton.className = "primary-button";
+  primaryButton.type = "button";
+  primaryButton.dataset.play = game.id;
+  primaryButton.textContent = translatedValue(game.multiplayer ? "Play match" : "Play now");
+
+  gameActions.append(libraryStatus, primaryButton);
+
+  gameInfo.append(gameTitleLine, gameDescShort, gameMeta, gamePlaytime, gameActions);
+
+  article.append(gameCover, gameInfo);
+
+  return article;
 }
 
 function renderGames() {
@@ -763,12 +830,24 @@ function renderGames() {
   const matched = games.filter(filterPass);
   const ownedGames = games.filter(game => library.includes(game.id) && filterPass(game));
   if (featuredGames) {
-    featuredGames.innerHTML = matched.map(game => renderGameCard(game)).join("")
-      || `<div class="empty-state">${translatedValue("No games match that search. Try another title or genre.")}</div>`;
+    if (matched.length > 0) {
+      featuredGames.replaceChildren(...matched.map(game => renderGameCard(game)));
+    } else {
+      const emptyState = document.createElement("div");
+      emptyState.className = "empty-state";
+      emptyState.textContent = translatedValue("No games match that search. Try another title or genre.");
+      featuredGames.replaceChildren(emptyState);
+    }
   }
   if (libraryGames) {
-    libraryGames.innerHTML = ownedGames.map(game => renderGameCard(game)).join("")
-      || `<div class="empty-state">${translatedValue("No games match that search. Try another title or genre.")}</div>`;
+    if (ownedGames.length > 0) {
+      libraryGames.replaceChildren(...ownedGames.map(game => renderGameCard(game)));
+    } else {
+      const emptyState = document.createElement("div");
+      emptyState.className = "empty-state";
+      emptyState.textContent = translatedValue("No games match that search. Try another title or genre.");
+      libraryGames.replaceChildren(emptyState);
+    }
   }
   const libraryCount = document.getElementById("library-count");
   const libraryTotal = document.getElementById("library-total");
@@ -776,10 +855,12 @@ function renderGames() {
   if (libraryTotal) libraryTotal.textContent = library.length;
 }
 
-document.querySelectorAll("#game-filters [data-filter]").forEach(btn => {
+// ⚡ Bolt Optimization: Cache the query selection to avoid repeated DOM traversals on every click event
+const filterButtons = document.querySelectorAll("#game-filters [data-filter]");
+filterButtons.forEach(btn => {
   btn.addEventListener("click", () => {
     activeFilter = btn.dataset.filter;
-    document.querySelectorAll("#game-filters [data-filter]").forEach(b => b.classList.toggle("active", b === btn));
+    filterButtons.forEach(b => b.classList.toggle("active", b === btn));
     renderGames();
   });
 });
@@ -1201,6 +1282,12 @@ const GAME_PREFIX_MAP = {
   "connect-four": "C",
   "tank-brawl": "B"
 };
+
+// Expose for testing
+if (typeof module !== "undefined" && module.exports) {
+  module.exports.GAME_PREFIX_MAP = GAME_PREFIX_MAP;
+}
+
 const PREFIX_GAME_MAP = {
   T: "tic-tac-toe",
   H: "neon-duel",
@@ -1303,6 +1390,11 @@ function generateRoomCode(gameId) {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
+}
+
+// Expose for testing
+if (typeof module !== "undefined" && module.exports) {
+  module.exports.generateRoomCode = generateRoomCode;
 }
 
 function createMultiplayerController({ game, container, extraToolbarHtml = "", onModeChange, onMessage, onPeerReady, onRematch }) {
@@ -5202,10 +5294,11 @@ initializePublicChat();
 updateProfileUI();
 loadPublicPlaytime();
 renderGames();
+// Expose for testing
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    formatDuration,
-    generateRoomCode,
-    GAME_PREFIX_MAP
-  };
+    module.exports = {
+        formatDuration,
+        generateRoomCode,
+        GAME_PREFIX_MAP
+    };
 }
