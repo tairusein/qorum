@@ -122,7 +122,12 @@ try {
 } catch (error) {
   console.warn("Could not read the saved game library.", error);
 }
-localStorage.setItem("playroom-library", JSON.stringify(library));
+
+try {
+  localStorage.setItem("playroom-library", JSON.stringify(library));
+} catch (error) {
+  console.warn("Could not write the saved game library.", error);
+}
 
 let activeFilter = "all";
 let authMode = "signin";
